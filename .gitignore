@@ -1,0 +1,3 @@
+build/
+dist/
+gspread.egg-info/
