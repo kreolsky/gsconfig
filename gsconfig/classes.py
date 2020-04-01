@@ -3,6 +3,7 @@ import os
 import json
 import re
 from datetime import datetime
+from memory_profiler import profile
 
 from oauth2client.service_account import ServiceAccountCredentials
 from concurrent.futures import ThreadPoolExecutor
@@ -23,10 +24,13 @@ class GSConfigError(Exception):
 class Worksheet(object):
     def __init__(self, page):
         self._sheet = page
-        self.title = page['properties']['title']
+        self._title = page['properties']['title']
         self.id = page['properties']['sheetId']
         self.index = page['properties']['index']
-        self._data_parser = {'json': self.get_as_json, 'csv': self.get_as_csv}
+        self._data_parser = {
+            'json': self.get_as_json,
+            'csv': self.get_as_csv,
+            'localization': self.get_as_localization}
         self.comment_letter = ['#', '@']  # Символ комментария. Ключи маркированные "#" не экспортируются.
 
     @property
@@ -38,10 +42,14 @@ class Worksheet(object):
         return self._sheet['properties']['gridProperties']['columnCount']
 
     @property
+    def title(self):
+        return self._title
+
+    @property
     def type(self):
-        title_list = self.title.split('.')
-        if len(title_list) > 1:
-            return title_list[-1]
+        title_type_list = self._title.split('.')
+        if len(title_type_list) > 1:
+            return title_type_list[-1]
 
         return 'json'
 
@@ -93,7 +101,7 @@ class Worksheet(object):
     def get_page_data(self, raw_data=False):
         return self._data_parser[self.type]()
 
-    def get_as_json(self, key='key', value='value', to_num=True, no_list=False):
+    def get_as_json(self, key='key', value='value', to_num=True, no_list=False, is_text=False):
         """
         Парсит данные со страницы гуглодоки в формат json и сохраняет в файл.
         См. tools.config_to_json
@@ -116,7 +124,7 @@ class Worksheet(object):
             value_index = headers.index(value)
 
             out = {
-                line[key_index]: config_to_json(line[value_index], to_num=to_num, no_list=no_list)
+                line[key_index]: config_to_json(line[value_index], to_num=to_num, no_list=no_list, is_text=is_text)
                 for line in data if len(line[0]) > 0
             }
 
@@ -126,10 +134,9 @@ class Worksheet(object):
         out = []
         for values in data:
             bufer = {
-                key: config_to_json(value, to_num=to_num, no_list=no_list)
+                key: config_to_json(value, to_num=to_num, no_list=no_list, is_text=is_text)
                 for key, value in zip(headers, values)
                 if not any([key.startswith(x) for x in self.comment_letter])
-                # if not key.startswith(self.comment_letter)
                 and len(key) > 0
             }
 
@@ -139,6 +146,9 @@ class Worksheet(object):
             out = out[0]
 
         return out
+
+    def get_as_localization(self):
+        return self.get_as_json(is_text=True)
 
     def get_as_csv(self):
         data = self.get_all_values()
@@ -172,10 +182,6 @@ class Spreadsheet(object):
     @property
     def title(self):
         return self._properties['title'].split('.')[0]
-
-    # @property
-    # def pages(self):
-    #     return [page.title for page in self.worksheets()]
 
     def __iter__(self):
         for page in self.worksheets():
@@ -314,29 +320,30 @@ class GameConfig(object):
         document_title -- название
         gspread_id -- id документа
 
-    documents -- список исходников всех документов (словарей) конфига.
-    Актуально когда обьект конфига восстанавливается из бекапа.
+    backup -- словарь с со списком документов конфига и настройками конфига.
+    Необходимо для восстановления обьекта конфига ииз бекапа.
     """
 
-    def __init__(self, client, settings={}, documents=None):
+    def __init__(self, client, settings={}, backup=None):
         self.client = client
-        self._documents = documents
-        self._settings = settings
+        self._settings = None
+        self._settings_gspread_id = None
+        self._documents = None
         self._documents_to_export = None
 
-        if 'gspread_id' in settings:
+        if backup:
+            self._documents = [Spreadsheet(x) for x in backup['documents']]
+            self._settings = backup['settings']
+
+        elif 'gspread_id' in settings:
             self._settings_gspread_id = settings['gspread_id']
             self._settings_page_name= settings['page_title']
 
         elif settings:
-            self._settings_gspread_id = None
             self._settings = {
                 key : GSpreadsheet(self.client, value)
                 for key, value in settings.items()
             }
-
-        if documents:
-            self._documents = [Spreadsheet(x) for x in documents]
 
     def __repr__(self):
         return f'{self.__class__.__name__}: ' + ', '.join([x.title for x in self.documents])
@@ -387,6 +394,7 @@ class GameConfig(object):
     def _get_document(self, gspread_obj):
         return gspread_obj.pull()
 
+    @profile
     def pull(self, max_workers=5):
         if not self._documents:
             with ThreadPoolExecutor(max_workers=max_workers) as pool:

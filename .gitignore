@@ -1,3 +1,8 @@
+__pycache__
+
 build/
 dist/
 gsconfig.egg-info/
+_json/
+_backup/
+google_oauth2_token.json

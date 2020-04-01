@@ -3,17 +3,24 @@ import csv
 import ast
 import pickle
 import bz2
+from memory_profiler import profile
 
 from . import classes
 
+@profile
 def backup_config(config, name, path=''):
-    backup = [x.get_raw_data() for x in config.documents]
+    backup = {
+        'documents': [x.get_raw_data() for x in config.documents],
+        'settings': config.settings
+        }
+
     save_zipped_file(f'{path}/{name}', backup)
 
 def save_zipped_file(filename, data):
     with bz2.BZ2File(filename, 'wb') as file:
         pickle.dump(data, file)
 
+@profile
 def load_source_from_backup(filename):
     """
     ВАЖНО!
@@ -25,17 +32,23 @@ def load_source_from_backup(filename):
 
     return data
 
+@profile
 def save_config_documents(config, path=''):
     """
     config -- обьект GameConfig or
     Сохраняет все страницы всех документов в отдельные файлы по указанному пути
     """
-    if not isinstance(config, classes.GameConfig):
-        raise classes.GSConfigError('Object must be of GameConfig type!')
+    if isinstance(config, classes.GameConfig):
+        for document in config:
+            for page in document:
+                _save_page(page, path)
 
-    for document in config:
-        for page in document:
+    elif isinstance(config, classes.Spreadsheet):
+        for page in config:
             _save_page(page, path)
+
+    else:
+        raise classes.GSConfigError('Object must be of GameConfig or Spreadsheet type!')
 
 def _save_page(page, path=''):
     """
@@ -45,7 +58,6 @@ def _save_page(page, path=''):
     if not isinstance(page, classes.Worksheet):
         raise classes.GSConfigError('Object must be of Worksheet type!')
 
-    save_page_function = {'json': save_as_json, 'csv': save_as_csv}
     return save_page_function[page.type](page.get_page_data(), page.title, path)
 
 def save_as_csv(data, title, path):
@@ -55,8 +67,12 @@ def save_as_csv(data, title, path):
             writer.writerow(line)
 
 def save_as_json(data, title, path):
+    title = ''.join(title.split(".")[:-1]) + '.json'
+
     with open(path + title, 'w', encoding='utf-8') as file:
         json.dump(data, file, indent = 2, ensure_ascii = False)
+
+save_page_function = {'json': save_as_json, 'csv': save_as_csv, 'localization': save_as_json}
 
 def dict_to_str(source, tab='', count=0):
     output = ''
