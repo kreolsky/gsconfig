@@ -3,7 +3,6 @@ import os
 import json
 import re
 from datetime import datetime
-from memory_profiler import profile
 
 from oauth2client.service_account import ServiceAccountCredentials
 from concurrent.futures import ThreadPoolExecutor
@@ -101,7 +100,7 @@ class Worksheet(object):
     def get_page_data(self, raw_data=False):
         return self._data_parser[self.type]()
 
-    def get_as_json(self, key='key', value='value', to_num=True, no_list=False, is_text=False):
+    def get_as_json(self, key='key', value='value', to_num=True, unwrap_list=False, is_text=False):
         """
         Парсит данные со страницы гуглодоки в формат json и сохраняет в файл.
         См. tools.config_to_json
@@ -109,7 +108,7 @@ class Worksheet(object):
         key - заголовок столбца с ключами.
         value - заголовок столбца с данными.
         to_num - нужно ли пытаться преобразовывать значения в числа. True (по умолчанию) пытается преобразовать.
-        no_list - нужно ли вытаскивать словари из списков единичной длины.
+        unwrap_list - нужно ли вытаскивать словари из списков единичной длины.
             False (по умолчанию) вытаскивает из списков все обьекты КРОМЕ словарей.
             True - вынимает из список ВСЕ типы обьектов, включая словари.
         """
@@ -124,7 +123,7 @@ class Worksheet(object):
             value_index = headers.index(value)
 
             out = {
-                line[key_index]: config_to_json(line[value_index], to_num=to_num, no_list=no_list, is_text=is_text)
+                line[key_index]: config_to_json(line[value_index], to_num=to_num, unwrap_list=unwrap_list, is_text=is_text)
                 for line in data if len(line[0]) > 0
             }
 
@@ -134,7 +133,7 @@ class Worksheet(object):
         out = []
         for values in data:
             bufer = {
-                key: config_to_json(value, to_num=to_num, no_list=no_list, is_text=is_text)
+                key: config_to_json(value, to_num=to_num, unwrap_list=unwrap_list, is_text=is_text)
                 for key, value in zip(headers, values)
                 if not any([key.startswith(x) for x in self.comment_letter])
                 and len(key) > 0
@@ -273,7 +272,7 @@ class GoogleOauth():
 
 
 class GameConfigLite(object):
-    def __init__(self, client : GoogleOauth, gspread_id):
+    def __init__(self, client, gspread_id):
         self.client = client
         self.gspread_id = gspread_id
         self._document = None
@@ -394,7 +393,6 @@ class GameConfig(object):
     def _get_document(self, gspread_obj):
         return gspread_obj.pull()
 
-    @profile
     def pull(self, max_workers=5):
         if not self._documents:
             with ThreadPoolExecutor(max_workers=max_workers) as pool:

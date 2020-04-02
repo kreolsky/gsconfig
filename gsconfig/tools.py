@@ -3,11 +3,9 @@ import csv
 import ast
 import pickle
 import bz2
-from memory_profiler import profile
 
 from . import classes
 
-@profile
 def backup_config(config, name, path=''):
     backup = {
         'documents': [x.get_raw_data() for x in config.documents],
@@ -20,7 +18,6 @@ def save_zipped_file(filename, data):
     with bz2.BZ2File(filename, 'wb') as file:
         pickle.dump(data, file)
 
-@profile
 def load_source_from_backup(filename):
     """
     ВАЖНО!
@@ -32,7 +29,6 @@ def load_source_from_backup(filename):
 
     return data
 
-@profile
 def save_config_documents(config, path=''):
     """
     config -- обьект GameConfig or
@@ -43,7 +39,7 @@ def save_config_documents(config, path=''):
             for page in document:
                 _save_page(page, path)
 
-    elif isinstance(config, classes.Spreadsheet):
+    elif isinstance(config, classes.Spreadsheet) or isinstance(config, classes.GameConfigLite):
         for page in config:
             _save_page(page, path)
 
@@ -150,7 +146,7 @@ def split_string_by_sep(string, sep, br):
         yield string[prev:i].strip(sep).strip()
         prev = i
 
-def parse_block(string, br, to_num, no_list):
+def parse_block(string, br, to_num, unwrap_list):
     """
     Используется внутри функции базовой функции config_to_json.
     Парсит блок (фрагмент исходной строки для разбора) разделенный только запятыми.
@@ -162,7 +158,7 @@ def parse_block(string, br, to_num, no_list):
     to_num - нужно ли пытаться преобразовывать значения в числа.
     True (по учаолчанию) пытается преобразовать.
 
-    no_list - нужно ли вытаскивать словари из списков единичной длины.
+    unwrap_list - нужно ли вытаскивать словари из списков единичной длины.
     False (по умолчанию) вытаскивает из списков все обьекты КРОМЕ словарей.
     True - вынимает из список ВСЕ типы обьектов, включая словари.
 
@@ -175,7 +171,7 @@ def parse_block(string, br, to_num, no_list):
 
     for line in split_string_by_sep(string, ',', br):
         if line.startswith(br_left):
-            substring = config_to_json(line[1:-1], br, to_num, no_list) or []
+            substring = config_to_json(line[1:-1], br, to_num, unwrap_list) or []
             if isinstance(substring, list) and len(substring) == 1:
                 substring = substring[0]
 
@@ -184,7 +180,7 @@ def parse_block(string, br, to_num, no_list):
         elif '=' in line:
             key, substring = split_string_by_sep(line, '=', br)
             if substring.startswith(br_left):
-                substring = config_to_json(substring[1:-1], br, to_num, no_list) or []
+                substring = config_to_json(substring[1:-1], br, to_num, unwrap_list) or []
 
             else:
                 substring = str_to_num(substring, to_num)
@@ -203,7 +199,7 @@ def parse_block(string, br, to_num, no_list):
     return out
 
 
-def config_to_json(string, br='{}', to_num=True, no_list=False, is_text=False):
+def config_to_json(string, br='{}', to_num=True, unwrap_list=False, is_text=False):
     """
     Парсит строку конфига и складывает результат в список словарей.
     Исходный формат крайне упрощенная и менее формальная версия JSON.
@@ -217,7 +213,7 @@ def config_to_json(string, br='{}', to_num=True, no_list=False, is_text=False):
     to_num - нужно ли пытаться преобразовывать значения в числа.
     True (по учаолчанию) пытается преобразовать.
 
-    no_list - нужно ли вытаскивать словари из списков единичной длины.
+    unwrap_list - нужно ли вытаскивать словари из списков единичной длины.
     False (по умолчанию) вытаскивает из списков все обьекты КРОМЕ словарей.
     True - вынимает из список ВСЕ типы обьектов, включая словари.
 
@@ -236,9 +232,9 @@ def config_to_json(string, br='{}', to_num=True, no_list=False, is_text=False):
     out = []
 
     for line in split_string_by_sep(string, '|', br):
-        out.append(parse_block(line, br, to_num, no_list))
+        out.append(parse_block(line, br, to_num, unwrap_list))
 
-    if len(out) == 1 and (type(out[0]) not in (dict, ) or no_list):
+    if len(out) == 1 and (type(out[0]) not in (dict, ) or unwrap_list):
         return out[0]
 
     return out
@@ -270,7 +266,7 @@ if __name__ == '__main__':
         ]
 
     for line in string:
-        print(json.dumps(config_to_json(line), indent=4))
+        print(json.dumps(config_to_json(line, unwrap_list=True), indent=4))
 
     for line in string_txt:
         print(json.dumps(config_to_json(line, is_text=True)))
