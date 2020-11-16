@@ -231,7 +231,7 @@ class Spreadsheet(object):
 
 class GSpreadsheet():
     def __init__(self, client, gspread_id):
-        self.client = client  # Обьект авторизации в гугле
+        self.client = client  # Обьект авторизации в гугле GoogleOauth
         self.gspread_id = gspread_id  # ID гуглотаблицы
         self._local_gspread_obj = None
 
