@@ -5,6 +5,7 @@ from .classes import GoogleOauth
 
 from . import classes
 from . import tools
+from . import parser
 
 """
 gsconfig

@@ -7,7 +7,7 @@ from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from concurrent.futures import ThreadPoolExecutor
 
-from .tools import config_to_json
+from .parser import config_to_json
 from . import tools
 
 
