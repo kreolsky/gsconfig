@@ -4,7 +4,7 @@ import ast
 import pickle
 import bz2
 
-# from . import classes
+from . import classes
 
 def backup_config(config, name, path=''):
     backup = {
