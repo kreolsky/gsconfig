@@ -4,18 +4,17 @@ import ast
 
 # Блок парсера конфигов!
 # Перевод из промежуточного формата конфигов в JSON
-def str_to_num(s, to_num=True, under_line=False):
+def str_to_num(s, to_num=True):
     """
     Пытается перевести строку в число, предварительно определив что это было, int или float
     Переводит true\false в "правильный" формат для JSON
     """
 
-    if s.lower() in ("true", "false"):
-        s = s.capitalize()
+    if s.lower() in ('none', 'nan', 'null'):
+        return None
 
-    # Как обрабывать нижнее подчеркивание между цифрами, по умолчанию оставлять строкой
-    if not under_line and '_' in s:
-        return s
+    if s.lower() in ('true', 'false'):
+        s = s.capitalize()
 
     if not to_num:
         return s
@@ -25,7 +24,7 @@ def str_to_num(s, to_num=True, under_line=False):
     except (ValueError, SyntaxError):
         return s
 
-def define_split_points(string, sep, br):
+def define_split_points(string: str, sep, br, raw_pattern):
     """
     Отпределение позиции всех разделяющих строку символов.
     Игнорирует разделители внутри блоков выделенных скобками br.
@@ -39,17 +38,21 @@ def define_split_points(string, sep, br):
 
     br = {br[0]: 1, br[-1]: -1}
     count = 0
+    raw_factor = True
 
     for i, letter in enumerate(string):
+        if letter is raw_pattern:
+            raw_factor = not raw_factor
+
         if letter in br:
             count += br[letter]
 
-        elif letter == sep and count == 0:
+        elif letter == sep and count == 0 and raw_factor:
             yield i
 
     yield len(string)
 
-def split_string_by_sep(string, sep, br):
+def split_string_by_sep(string: str, sep, br, raw_pattern):
     """
     Разделение строки на массив подстрок по символу разделителю.
     Не разделяет блоки выделенные скобками.
@@ -62,11 +65,11 @@ def split_string_by_sep(string, sep, br):
     """
 
     prev = 0
-    for i in define_split_points(string, sep, br):
+    for i in define_split_points(string, sep, br, raw_pattern):
         yield string[prev:i].strip(sep).strip()
         prev = i
 
-def parse_block(string, br, to_num, unwrap_list):
+def parse_block(string, br, dict_sep, block_sep, to_num, unwrap_list, raw_pattern):
     """
     Используется внутри функции базовой функции config_to_json.
     Парсит блок (фрагмент исходной строки для разбора) разделенный только запятыми.
@@ -74,6 +77,8 @@ def parse_block(string, br, to_num, unwrap_list):
     string - исходная строка для разбора.
 
     br - тип скобок выделяющих подблоки. '{}' по умолчанию.
+    dict_sep - разделитель ключ\значение элементов словаря. '=' по умолчанию.
+    block_sep - разделитель блоков. Синтаксический сахар.
 
     to_num - нужно ли пытаться преобразовывать значения в числа.
     True (по учаолчанию) пытается преобразовать.
@@ -89,18 +94,25 @@ def parse_block(string, br, to_num, unwrap_list):
     out = []
     br_left = br[0]
 
-    for line in split_string_by_sep(string, ',', br):
-        if line.startswith(br_left):
-            substring = config_to_json(line[1:-1], br, to_num, unwrap_list) or []
-            if isinstance(substring, list) and len(substring) == 1:
-                substring = substring[0]
+    for line in split_string_by_sep(string, ',', br, raw_pattern):
 
+        # Проверка нужно ли вообще парсить строку
+        if line.startswith(raw_pattern):
+            out.append(line[1:-1])
+
+        # Проверка наличия блока
+        elif line.startswith(br_left):
+
+            # Внутренний блок всегд разворачиваем из лишних списков
+            # Иначе лезут паразитные вложения
+            substring = config_to_json(line[1:-1], br, dict_sep, block_sep, to_num, unwrap_list=True) or []
             out.append(substring)
 
-        elif '=' in line:
-            key, substring = split_string_by_sep(line, '=', br)
+        # Проверка на словарь
+        elif dict_sep in line:
+            key, substring = split_string_by_sep(line, dict_sep, br, raw_pattern)
             if substring.startswith(br_left):
-                substring = config_to_json(substring[1:-1], br, to_num, unwrap_list) or []
+                substring = config_to_json(substring[1:-1], br, dict_sep, block_sep, to_num, unwrap_list) or []
 
             else:
                 substring = str_to_num(substring, to_num)
@@ -119,7 +131,7 @@ def parse_block(string, br, to_num, unwrap_list):
     return out
 
 
-def config_to_json(string, br='{}', to_num=True, unwrap_list=False, is_text=False):
+def config_to_json(string, br='{}', dict_sep='=', block_sep='|', to_num=True, unwrap_list=False, raw_pattern='"', is_raw=False):
     """
     Парсит строку конфига и складывает результат в список словарей.
     Исходный формат крайне упрощенная и менее формальная версия JSON.
@@ -129,6 +141,8 @@ def config_to_json(string, br='{}', to_num=True, unwrap_list=False, is_text=Fals
     string - исходная строка для разбора.
 
     br - тип скобок выделяющих подблоки. '{}' по умолчанию.
+    dict_sep - разделитель ключ\значение элементов словаря. '=' по умолчанию.
+    block_sep - разделитель блоков. Синтаксический сахар
 
     to_num - нужно ли пытаться преобразовывать значения в числа.
     True (по учаолчанию) пытается преобразовать.
@@ -137,22 +151,27 @@ def config_to_json(string, br='{}', to_num=True, unwrap_list=False, is_text=Fals
     False (по умолчанию) вытаскивает из списков все обьекты КРОМЕ словарей.
     True - вынимает из список ВСЕ типы обьектов, включая словари.
 
+    raw_pattern - символ маркирующий строку которую не нужно разбирать, по умолчанию двойная кавычка '"'
+    Строки начинающиеся с символа raw_pattern не парсятся и сохраняются как есть.
+
+    is_raw - указание надо ли парсить строку или нет. False по умаолчанию.
+    False (по умолчанию) - парсит строку по всем правилам, с учётом raw_pattern.
+    True - не парсит, возвращает как есть.
+
     Пример: '{i = 4, p = 100, n = name}, {t = 4, e = 100, n = {{m = 4, r = 100}, n = name}}, c = 4'
     Пример: 'value1, value2, value3'
 
-    Возможно использование дополнительного разделителя '|' на блоки, в таком случае строка:
+    Возможно использование дополнительного разделителя на блоки (block_sep='|'), в таком случае строка:
     'itemsCount = {count = 3, weight = 65 | count = 4, weight = 35}' будет идентична записи:
     'itemsCount = {{count = 3, weight = 65}, {count = 4, weight = 35}}'
     """
-
-    if is_text:
+    string = str(string)
+    if is_raw:
         return string
 
-    string = str(string)
     out = []
-
-    for line in split_string_by_sep(string, '|', br):
-        out.append(parse_block(line, br, to_num, unwrap_list))
+    for line in split_string_by_sep(string, block_sep, br, raw_pattern):
+        out.append(parse_block(line, br, dict_sep, block_sep, to_num, unwrap_list, raw_pattern))
 
     if len(out) == 1 and (type(out[0]) not in (dict, ) or unwrap_list):
         return out[0]
@@ -168,7 +187,7 @@ if __name__ == '__main__':
         '{9.1, 6.0, 6}, {7 = 7, zero = 0, one, two = {2, dva}, tree = 3}, {a, b, f}',
         'five = {three = 3, two = 2}',
         'life',
-        '{life = TRUE}',
+        '{life = {TRUE}}',
         '8',
         '8 = 8',
         '20:00',
@@ -178,7 +197,11 @@ if __name__ == '__main__':
         'id = act00040, trigger = {and = {eq = {08.04.2019, now} | more = {50, hands} | or = {more = {10, consecutiveDays} | more = {100, gold}}}} | id = act00050, trigger = {and = {more = {50, hands}}}',
         'id = act00040, trigger = {and = {eq = {now = 10.04.2019} | more = {hands = 50} | or = {more = {consecutiveDays = 50} | more = {gold = 100}}}} | id = act00050, trigger = {and = {more = {hands = 50}}}',
         '{life = {}}',
-        'use_odds = 1, buyin = {max = 1000000000000}, client = {quests_available = 0}, crupie_tips = {tiers = {0, {min_amount = 300, max_amount = {7500, {0.1, user.chips}}}, 200, {min_amount = 2500, max_amount = {62500, {0.1, user.chips}}}, 7500, {min_amount = 25000, max_amount = {625000, {0.1, user.chips}}}, 50000, {min_amount = 250000, max_amount = {6250000, {0.1, user.chips}}}, 250000, {min_amount = 500000, max_amount = {12500000, {0.1, user.chips}}}}',
+        'a = nan',
+        'popup_icon = {left = -1, top = -28}, widget_icon = {{pen, 0, 0, 0}, {sample, 8, 8, 8}, top = 10}, mobile_banner = {title_position = {left = "0x90532022", "oppa", "work!", right = 10, top = 11}}, popup_scheme = "0xFF000000,0xFF000000,0xFF000000,0x30c77263,0xFFf56b45,0xFF152645,0xFFe48f72,0xFF3d407a,0xFF000000"',
+        '"payload.cash_delta_ratio", ">=", 10"o"0 | payload.bankroll_delta, ">=", 50000',
+        '"<color=#6aefff>{New, new2 = 5} round</color> has | begun"',
+        'user.om_group, -in, values = {37, 43, 44, 555, "556"} | payload.cash_delta_ratio, ">=", 100 | payload.bankroll_delta, ">=", 50000'
         ]
 
     string_txt = [
@@ -187,7 +210,8 @@ if __name__ == '__main__':
         ]
 
     for line in string:
-        print(json.dumps(config_to_json(line, unwrap_list=True), indent=4))
+        print(json.dumps(config_to_json(line, unwrap_list=False), indent=4))
 
-    # for line in string_txt:
-    #     print(json.dumps(config_to_json(line, is_text=True)))
+
+    for line in string_txt:
+        print(json.dumps(config_to_json(line, is_raw=True)))

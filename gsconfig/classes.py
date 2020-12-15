@@ -100,7 +100,7 @@ class Worksheet(object):
     def get_page_data(self, raw_data=False):
         return self._data_parser[self.type]()
 
-    def get_as_json(self, key='key', value='value', to_num=True, unwrap_list=False, is_text=False):
+    def get_as_json(self, key='key', value='value', to_num=True, unwrap_list=False, is_raw=False):
         """
         Парсит данные со страницы гуглодоки в формат json и сохраняет в файл.
         См. tools.config_to_json
@@ -123,7 +123,7 @@ class Worksheet(object):
             value_index = headers.index(value)
 
             out = {
-                line[key_index]: config_to_json(line[value_index], to_num=to_num, unwrap_list=unwrap_list, is_text=is_text)
+                line[key_index]: config_to_json(line[value_index], to_num=to_num, unwrap_list=unwrap_list, is_raw=is_raw)
                 for line in data if len(line[0]) > 0
             }
 
@@ -133,7 +133,7 @@ class Worksheet(object):
         out = []
         for values in data:
             bufer = {
-                key: config_to_json(value, to_num=to_num, unwrap_list=unwrap_list, is_text=is_text)
+                key: config_to_json(value, to_num=to_num, unwrap_list=unwrap_list, is_raw=is_raw)
                 for key, value in zip(headers, values)
                 if not any([key.startswith(x) for x in self.comment_letter])
                 and len(key) > 0
@@ -147,7 +147,7 @@ class Worksheet(object):
         return out
 
     def get_as_localization(self):
-        return self.get_as_json(is_text=True)
+        return self.get_as_json(is_raw=True)
 
     def get_as_csv(self):
         data = self.get_all_values()
