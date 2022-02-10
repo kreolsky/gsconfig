@@ -51,7 +51,7 @@ class Page(object):
             'csv': self.get_as_csv,
             'raw': self.get_as_raw}
         # Ключи маркированные этими символами не экспортируются.
-        self.comment_letter = ['#', '.']
+        self.key_skip_letters = []
 
     @property
     def title(self):
@@ -68,16 +68,20 @@ class Page(object):
     def __repr__(self):
         return json.dumps(self.get())
 
-    def set_comment_letter(self, comment_letter):
-        if not isinstance(comment_letter, list):
-            raise GSConfigError(f'It have to be a list!')
+    def set_key_skip_letters(self, key_skip_letters):
+        """
+        Символ комментария для ключей на страницах конфига.
+        Ключи начинающиеся с этих символов не экспортируются.
+        """
 
-        self.comment_letter = comment_letter
+        if not isinstance(key_skip_letters, list):
+            raise GSConfigError(f'It has to be a list!')
+        self.key_skip_letters = key_skip_letters
 
     def get(self, page_type=None, raw_data=False):
         """
-        Достаёт со странцы данные адекватно их типу.
-        Если тип не указан отдельно и не задан пользователем пытается достать как json
+        Достаёт данные со страницы данные в формете адекватном их типу.
+        Если тип не указан отдельно и не задан пользователем пытается достать как json.
         """
 
         page_type = page_type or self.type
@@ -88,8 +92,8 @@ class Page(object):
         Парсит данные со страницы гуглодоки в формат JSON.
         См. parser.config_to_json
 
-        key - заголовок столбца с ключами.
-        value - заголовок столбца с данными.
+        key - заголовок столбца с ключами
+        value - заголовок столбца с данными
         **params - все параметры доступные функции parser.config_to_json парсера
         """
 
@@ -116,7 +120,7 @@ class Page(object):
             bufer = {
                 key: config_to_json(value, **params)
                 for key, value in zip(headers, values)
-                if not any([key.startswith(x) for x in self.comment_letter]) and len(key) > 0
+                if not any([key.startswith(x) for x in self.key_skip_letters]) and len(key) > 0
             }
             out.append(bufer)
 
@@ -125,15 +129,8 @@ class Page(object):
 
         return out
 
-    def get_as_raw(self):
-        bufer = [
-            {
-                key: value
-                for key, value in item.items()
-                if not any([key.startswith(x) for x in self.comment_letter])
-            } for item in self.worksheet.get_all_records()
-        ]
-        return bufer
+    def get_as_raw(self, **params):
+        return self.get_as_json(is_raw=True, **params)
 
     def get_as_csv(self):
         return self.worksheet.get_all_values()
@@ -141,33 +138,70 @@ class Page(object):
 
 class Document(object):
     """
-    Обертка поверх gspread.Spreadsheet
+    Класс обертка поверх gspread.Spreadsheet.
     """
 
     def __init__(self, spreadsheet):
         self.spreadsheet = spreadsheet # Исходный обьект gspread.Spreadsheet
-
-    @property
-    def document(self):
-        return self.spreadsheet
+        self.page_skip_letters = []
+        self.key_skip_letters = []
 
     def __repr__(self):
         return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet_id}>"
 
     def __getitem__(self, title):
-        return Page(self.spreadsheet.worksheet(title))
+        page = Page(self.spreadsheet.worksheet(title))
+        page.set_key_skip_letters(self.key_skip_letters)
+        return page
 
     def __iter__(self):
         for page in self.spreadsheet.worksheets():
-            yield Page(page)
+            page = Page(page)
+            page.set_key_skip_letters(self.key_skip_letters)
+            yield page
+
+    def set_page_skip_letters(self, page_skip_letters):
+        """
+        Символ комментария для страниц конфига.
+        Страницы начинающиеся с этих символов не экспортируются.
+        """
+
+        if not isinstance(page_skip_letters, list):
+            raise GSConfigError(f'It has to be a list!')
+        self.page_skip_letters = page_skip_letters
+
+    def set_key_skip_letters(self, key_skip_letters):
+        """
+        Символ комментария для ключей на страницах конфига.
+        Ключи начинающиеся с этих символов не экспортируются.
+        """
+
+        if not isinstance(key_skip_letters, list):
+            raise GSConfigError(f'It has to be a list!')
+        self.key_skip_letters = key_skip_letters
+
+    def pages(self):
+        """
+        Метод возвращает только основные страницы конфига.
+        Те, которые НЕ начинаются с символов в page_skip_letters.
+        """
+
+        for page in self:
+            if any([page.title.startswith(x) for x in self.page_skip_letters]):
+                continue
+            yield page
 
 
 class GameConfigLite(Document):
+    """
+    Игровой конфиг состоящий только из одной гуглотаблички.
+    """
     def __init__(self, client, spreadsheet_id):
         self.client = client  # Обьект авторизации в гугле GoogleOauth
         self.spreadsheet_id = spreadsheet_id  # ID гуглотаблицы
         self._spreadsheet = None
-        self.comment_letters = ['#', '.']
+        self.page_skip_letters = ['#', '.']
+        self.key_skip_letters = ['#', '.']
 
     @property
     def spreadsheet(self):
@@ -179,28 +213,6 @@ class GameConfigLite(Document):
             self._spreadsheet = self.client.connect.open_by_key(self.spreadsheet_id)
 
         return self._spreadsheet
-
-    def set_comment_letters(self, comment_letters):
-        """
-        Страницы начинающиеся с этих символов не экспортируются
-        """
-
-        if not isinstance(comment_letters, list):
-            raise GSConfigError(f'It have to be a list!')
-
-        self.comment_letters = comment_letters
-
-    def pages(self):
-        """
-        Метод возвращает только основные страницы конфига.
-        Те, которые не начинаются с символов комментария в comment_letters
-        """
-
-        for page in self.spreadsheet.worksheets():
-            if any([page.title.startswith(x) for x in self.comment_letters]):
-                continue
-
-            yield Page(page)
 
     def save(self, path=''):
         for page in self.pages():

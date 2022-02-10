@@ -11,11 +11,11 @@ client = gsconfig.GoogleOauth(google_oauth2_token_file_path)
 config = gsconfig.GameConfigLite(client, gspread_id)
 
 print(type(config))
-# print(config.spreadsheet.fetch_sheet_metadata(params = {"includeGridData": "true"}))
+print(type(config.spreadsheet))
 
 # Все страницы конфига
 for page in config:
-    print(page.title)
+    print(page.title, type(page))
 
 # Только актуальные к экспорту страницы
 for page in config.pages():
@@ -25,6 +25,7 @@ for page in config.pages():
 ws = config[".players.json"]
 print(type(ws))
 print(ws.get())
+print(ws.get_as_raw())
 
 # Сохранить все страницы конфига
 config.save('_json')
