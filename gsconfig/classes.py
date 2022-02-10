@@ -20,238 +20,6 @@ class GSConfigError(Exception):
         return f'{self.text} Err no. {self.value}'
 
 
-class Worksheet(object):
-    def __init__(self, page):
-        self._sheet = page
-        self._title = page['properties']['title']
-        self.id = page['properties']['sheetId']
-        self.index = page['properties']['index']
-        self._data_parser = {
-            'json': self.get_as_json,
-            'csv': self.get_as_csv,
-            'localization': self.get_as_localization}
-        self.comment_letter = ['#', '@']  # Символ комментария. Ключи маркированные "#" не экспортируются.
-
-    @property
-    def rows(self):
-        return self._sheet['properties']['gridProperties']['rowCount']
-
-    @property
-    def columns(self):
-        return self._sheet['properties']['gridProperties']['columnCount']
-
-    @property
-    def title(self):
-        return self._title
-
-    @property
-    def type(self):
-        title_type_list = self._title.split('.')
-        if len(title_type_list) > 1:
-            return title_type_list[-1]
-
-        return 'json'
-
-    def __repr__(self):
-        return json.dumps(self.get_page_data())
-
-    def set_comment_letter(self, comment_letter):
-        if not isinstance(comment_letter, list):
-            raise GSConfigError(f'It have to be a list!')
-
-        self.comment_letter = comment_letter
-
-    def get_all_values(self, raw_data=False):
-        data_type = 'effectiveValue'
-        if raw_data:
-            data_type = 'userEnteredValue'
-
-        page = []
-        bufer = []
-        for raw_data_line in self._sheet['data'][0]['rowData']:
-            line = []
-
-            if not raw_data_line:
-                bufer.append(line)
-                continue
-
-            for cell in raw_data_line['values']:
-                if data_type not in cell:
-                    line.append('')
-                    continue
-
-                line.append(list(cell[data_type].values())[0])
-
-            # Отсеивание пустых строк в конце документа.
-            # Пустые строки складываются в буфер, если после пустых окажется
-            # заполненная, то пустые тоже будут добавлены в документ
-            if not sum([len(str(x)) for x in line]):
-                bufer.append(line)
-                continue
-
-            if bufer:
-                page.extend(bufer)
-                bufer = []
-
-            page.append(line)
-
-        return page
-
-    def get_page_data(self, raw_data=False):
-        return self._data_parser[self.type]()
-
-    def get_as_json(self, key='key', value='value', to_num=True, unwrap_list=False, is_raw=False):
-        """
-        Парсит данные со страницы гуглодоки в формат json и сохраняет в файл.
-        См. tools.config_to_json
-
-        key - заголовок столбца с ключами.
-        value - заголовок столбца с данными.
-        to_num - нужно ли пытаться преобразовывать значения в числа. True (по умолчанию) пытается преобразовать.
-        unwrap_list - нужно ли вытаскивать словари из списков единичной длины.
-            False (по умолчанию) вытаскивает из списков все обьекты КРОМЕ словарей.
-            True - вынимает из список ВСЕ типы обьектов, включая словари.
-        """
-        page_data = self.get_all_values()
-
-        headers = page_data[0]
-        data = page_data[1:]
-
-        # Если документ из двух колонок. Ключами в столбце key и значением в столбце value
-        if key in headers and value in headers:
-            key_index = headers.index(key)
-            value_index = headers.index(value)
-
-            out = {
-                line[key_index]: config_to_json(line[value_index], to_num=to_num, unwrap_list=unwrap_list, is_raw=is_raw)
-                for line in data if len(line[0]) > 0
-            }
-
-            return out
-
-        # Первая строка с заголовками, остальные строки с данными
-        out = []
-        for values in data:
-            bufer = {
-                key: config_to_json(value, to_num=to_num, unwrap_list=unwrap_list, is_raw=is_raw)
-                for key, value in zip(headers, values)
-                if not any([key.startswith(x) for x in self.comment_letter])
-                and len(key) > 0
-            }
-
-            out.append(bufer)
-
-        if len(out) == 1:
-            out = out[0]
-
-        return out
-
-    def get_as_localization(self):
-        return self.get_as_json(is_raw=True)
-
-    def get_as_csv(self):
-        data = self.get_all_values()
-
-        columns = len(data[0])
-        for line in data:
-            add_columns_num = columns - len(line)
-            line.extend([''] * add_columns_num)
-
-        return data
-
-
-class Spreadsheet(object):
-    """
-    Класс прокладка, создается из полного бекапа гуглотаблицы
-    """
-    def __init__(self, full_gspread_json):
-        self._source = full_gspread_json
-        self._properties = self._source['properties']
-        self.id = self._source['spreadsheetId']
-        self.url = self._source['spreadsheetUrl']
-        self.ts = self._source['timestamp']
-        self.comment_letter = ['@', '#', '.'] # Эскпортитуются только страницы начинающиеся с этого символа.
-        self.notice = ''
-        self._pages = None
-
-    @property
-    def _sheets(self):
-        return self._source['sheets']
-
-    @property
-    def title(self):
-        return self._properties['title'].split('.')[0]
-
-    def __iter__(self):
-        for page in self.worksheets():
-            if any([page.title.startswith(x) for x in self.comment_letter]):
-                continue
-
-            yield(page)
-
-    def __repr__(self):
-        return f'{self.title}: ' + ', '.join(x.title for x in self.worksheets())
-
-    def __contains__(self, value):
-        return value in [x.title for x in self.worksheets()]
-
-    def __getitem__(self, title):
-        return self.worksheet(title)
-
-    def set_notice(self, notice):
-        self.notice = notice
-
-    def set_comment_letter(self, comment_letter):
-        if not isinstance(comment_letter, list):
-            raise GSConfigError(f'It have to be a list!')
-
-        self.comment_letter = comment_letter
-
-    def worksheets(self):
-        """
-        Returns all worksheets from document.
-        """
-        if not self._pages:
-            self._pages = [Worksheet(x) for x in self._sheets]
-
-        return self._pages
-
-    def worksheet(self, title):
-        """
-        Returns a worksheet with specified `title`.
-        """
-        return next(filter(lambda x: x.title == title, self.worksheets()))
-
-    def get_raw_data(self):
-        return self._source
-
-    def find_and_replace(self, source, target):
-        self._source['sheets'] = json.loads(re.sub(source, target, json.dumps(self._sheets)))
-
-
-class GSpreadsheet():
-    def __init__(self, client, gspread_id):
-        self.client = client  # Обьект авторизации в гугле GoogleOauth
-        self.gspread_id = gspread_id  # ID гуглотаблицы
-        self._local_gspread_obj = None
-
-    def pull(self):
-        """
-        Возвращает обьект Spreadsheet.
-        """
-        if not self._local_gspread_obj:
-            gspread_obj = self.client.connect.open_by_key(self.gspread_id)
-            local_gspread_json = gspread_obj.fetch_sheet_metadata(include_grid_data='true')  # Весь документ
-            local_gspread_json['timestamp'] = str(datetime.now())
-
-            self._local_gspread_obj = Spreadsheet(local_gspread_json)
-
-        return self._local_gspread_obj
-
-    def __repr__(self):
-        return f'<{self.__class__.__name__} from: {self.gspread_id}>'
-
-
 class GoogleOauth():
     def __init__(self, oauth2_token_file_path):
         self._key_file_path = oauth2_token_file_path
@@ -271,37 +39,172 @@ class GoogleOauth():
         return self._google_auth
 
 
-class GameConfigLite(object):
-    def __init__(self, client, gspread_id):
-        self.client = client
-        self.gspread_id = gspread_id
-        self._document = None
+class Page(object):
+    """
+    Обёртка поверх gspread.Worksheet
+    """
+
+    def __init__(self, worksheet):
+        self.worksheet = worksheet # исходный обьект gspread.Worksheet
+        self._data_parser = {
+            'json': self.get_as_json,
+            'csv': self.get_as_csv,
+            'raw': self.get_as_raw}
+        # Ключи маркированные этими символами не экспортируются.
+        self.comment_letter = ['#', '.']
+
+    @property
+    def title(self):
+        return self.worksheet.title
+
+    @property
+    def type(self):
+        title_type_list = self.title.split('.')
+        if len(title_type_list) > 1:
+            return title_type_list[-1]
+
+        return 'json'
 
     def __repr__(self):
-        return self.document.__repr__()
+        return json.dumps(self.get())
 
-    def __iter__(self):
-        for page in self.document:
-            yield(page)
+    def set_comment_letter(self, comment_letter):
+        if not isinstance(comment_letter, list):
+            raise GSConfigError(f'It have to be a list!')
 
-    def __getitem__(self, title):
-        return self.document[title]
+        self.comment_letter = comment_letter
+
+    def get(self, page_type=None, raw_data=False):
+        """
+        Достаёт со странцы данные адекватно их типу.
+        Если тип не указан отдельно и не задан пользователем пытается достать как json
+        """
+
+        page_type = page_type or self.type
+        return self._data_parser[page_type]()
+
+    def get_as_json(self, key='key', value='value', **params):
+        """
+        Парсит данные со страницы гуглодоки в формат JSON.
+        См. parser.config_to_json
+
+        key - заголовок столбца с ключами.
+        value - заголовок столбца с данными.
+        **params - все параметры доступные функции parser.config_to_json парсера
+        """
+
+        page_data = self.worksheet.get_all_values()
+
+        headers = page_data[0]
+        data = page_data[1:]
+
+        # Если документ из двух колонок. Ключами в столбце key и значением в столбце value
+        if key in headers and value in headers:
+            key_index = headers.index(key)
+            value_index = headers.index(value)
+
+            out = {
+                line[key_index]: config_to_json(line[value_index], **params)
+                for line in data if len(line[0]) > 0
+            }
+
+            return out
+
+        # Первая строка с заголовками, остальные строки с данными
+        out = []
+        for values in data:
+            bufer = {
+                key: config_to_json(value, **params)
+                for key, value in zip(headers, values)
+                if not any([key.startswith(x) for x in self.comment_letter]) and len(key) > 0
+            }
+            out.append(bufer)
+
+        if len(out) == 1:
+            out = out[0]
+
+        return out
+
+    def get_as_raw(self):
+        bufer = [
+            {
+                key: value
+                for key, value in item.items()
+                if not any([key.startswith(x) for x in self.comment_letter])
+            } for item in self.worksheet.get_all_records()
+        ]
+        return bufer
+
+    def get_as_csv(self):
+        return self.worksheet.get_all_values()
+
+
+class Document(object):
+    """
+    Обертка поверх gspread.Spreadsheet
+    """
+
+    def __init__(self, spreadsheet):
+        self.spreadsheet = spreadsheet # Исходный обьект gspread.Spreadsheet
 
     @property
     def document(self):
-        if not self._document:
-            self.pull()
+        return self.spreadsheet
 
-        return self._document
+    def __repr__(self):
+        return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet_id}>"
 
-    def pull(self):
-        if not self._document:
-            self._document = GSpreadsheet(self.client, self.gspread_id).pull()
+    def __getitem__(self, title):
+        return Page(self.spreadsheet.worksheet(title))
 
-        return self._document
+    def __iter__(self):
+        for page in self.spreadsheet.worksheets():
+            yield Page(page)
 
-    def get_raw_data(self):
-        return self.document.get_raw_data()
+
+class GameConfigLite(Document):
+    def __init__(self, client, spreadsheet_id):
+        self.client = client  # Обьект авторизации в гугле GoogleOauth
+        self.spreadsheet_id = spreadsheet_id  # ID гуглотаблицы
+        self._spreadsheet = None
+        self.comment_letters = ['#', '.']
+
+    @property
+    def spreadsheet(self):
+        """
+        Возвращает обьект gspread.Spreadsheet
+        """
+
+        if not self._spreadsheet:
+            self._spreadsheet = self.client.connect.open_by_key(self.spreadsheet_id)
+
+        return self._spreadsheet
+
+    def set_comment_letters(self, comment_letters):
+        """
+        Страницы начинающиеся с этих символов не экспортируются
+        """
+
+        if not isinstance(comment_letters, list):
+            raise GSConfigError(f'It have to be a list!')
+
+        self.comment_letters = comment_letters
+
+    def pages(self):
+        """
+        Метод возвращает только основные страницы конфига.
+        Те, которые не начинаются с символов комментария в comment_letters
+        """
+
+        for page in self.spreadsheet.worksheets():
+            if any([page.title.startswith(x) for x in self.comment_letters]):
+                continue
+
+            yield Page(page)
+
+    def save(self, path=''):
+        for page in self.pages():
+            tools.save_page(page, path)
 
 
 class GameConfig(object):
@@ -312,12 +215,12 @@ class GameConfig(object):
 
     settings -- словарь с настройками.
     Либо id документа и название вкладки со списком всех документов конфига
-        gspread_id -- id таблицы со списко конфигов
+        spreadsheet_id -- id таблицы со списко конфигов
         page_title -- заголовок страницы в таблице со списком документов конфига
 
-    Либо словарь вида {document_title: gspread_id, ...}
+    Либо словарь вида {document_title: spreadsheet_id, ...}
         document_title -- название
-        gspread_id -- id документа
+        spreadsheet_id -- id документа
 
     backup -- словарь с со списком документов конфига и настройками конфига.
     Необходимо для восстановления обьекта конфига ииз бекапа.
@@ -331,12 +234,12 @@ class GameConfig(object):
         self._documents_to_export = None
 
         if backup:
-            self._documents = [Spreadsheet(x) for x in backup['documents']]
+            self._documents = [Document(x) for x in backup['documents']]
             self._settings = backup['settings']
 
-        elif 'gspread_id' in settings:
-            self._settings_gspread_id = settings['gspread_id']
-            self._settings_page_name= settings['page_title']
+        elif 'spreadsheet_id' in settings:
+            self._settings_gspread_id = settings['spreadsheet_id']
+            self._settingspage_name= settings['page_title']
 
         elif settings:
             self._settings = {
@@ -347,7 +250,7 @@ class GameConfig(object):
     def __repr__(self):
         return f'{self.__class__.__name__}: ' + ', '.join([x.title for x in self.documents])
 
-    def __iter__(self) -> Spreadsheet:
+    def __iter__(self) -> Document:
         for document in self.documents:
             yield(document)
 
@@ -372,7 +275,7 @@ class GameConfig(object):
     def settings(self):
         if not self._settings:
             settings_obj = GSpreadsheet(self.client, self._settings_gspread_id).pull()
-            settings = settings_obj[self._settings_page_name].get_as_json()
+            settings = settings_obj[self._settingspage_name].get_as_json()
 
             self._settings = {
                 key : GSpreadsheet(self.client, value)
@@ -399,60 +302,3 @@ class GameConfig(object):
                 self._documents = list(pool.map(self._get_document, [x for x in self.documents_to_export]))
 
         return self._documents
-
-    def _create_gspread(self, title, owner, dummy_page):
-        """
-        title -- название документа.
-
-        owner -- мыло владельца документы.
-        Обязательный параметр, иначе доступ к доке будет только у бота.
-
-        dummy_page -- id страницы которую брать в качестве донора,
-        актуально для конфигов которые сожержат кастомные формулы.
-        По уморочанию они не сохраняются, тогда есть смысл страницы не создавать,
-        а копировать с той в которой эти формулы есть.
-        """
-        if dummy_page:
-            new_gspread = self.client.connect.copy(dummy_page, title)
-        else:
-            new_gspread = self.client.connect.create(title)
-
-        new_gspread.share(owner, perm_type='user', role='owner')
-        return new_gspread
-
-    def fork(self, gspread_id='', owner='', dummy_page=''):
-        # Создать гуглодокумент для каждого документа конфигов и запомнить новые id
-        # Создасть словарь замены id
-        # Заменить старые id на новые
-        # Залить в каждый документ его содержимое
-        # Залить список новых документов в указанный гуглофайл или создать новый если не указано
-
-        new_config = {x.title: self._create_gspread(x.title, owner, dummy_page) for x in self.documents}
-
-        # Словарь замены id подгружаемых документов
-        # Конфиг должен быть изолирован от внешних ссылок
-        old_to_new = {}
-        for title, gspread in new_config.items():
-            old_to_new[title] = {
-                'old': self.document(title).id,
-                'new': gspread.id
-            }
-
-        for document in self.documents:
-            # Замена ссылок.
-            # Важно! Конфиг должен быть изначально самодостаточен
-            for x in old_to_new.values():
-                document.find_and_replace(x['old'], x['new'])
-
-            new_document = new_config[document.title]
-            sheet_to_del = new_document.get_worksheet(0)
-
-            # Заполнение новых документов
-            for page in document.worksheets():
-                sheet = new_document.add_worksheet(page.title, page.rows, page.columns)
-                sheet.append_rows(page.get_all_values(raw_data=True), value_input_option='USER_ENTERED')
-
-            new_document.del_worksheet(sheet_to_del)
-
-        out = {key: value['new'] for key, value in old_to_new.items()}
-        return out
