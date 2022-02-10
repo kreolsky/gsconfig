@@ -1,21 +1,30 @@
 import os
 import gsconfig
-import json
+
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 google_oauth2_token_file_path = 'google_oauth2_token.json'
-gspread_id = '18l0UwSwQswrobsfKptLtfiwvEjFCjxyV4Mn3wGIIcIY'
-page_title = 'documents'
+gspread_id = '1mZJtTkSzYRVcWJx93IMHOxCSwmgHVUDI8g93LziFvTs'
 
 client = gsconfig.GoogleOauth(google_oauth2_token_file_path)
-game_config_lite = gsconfig.GameConfigLite(client, '1jSlEF1kLLkFYM36zaJsxWeDDhgo8YGfWKFMwJ2Ad4aA')
+config = gsconfig.GameConfigLite(client, gspread_id)
 
-data = game_config_lite['instant'].get_page_data()
-print(json.dumps(data, indent = 2))
+print(type(config))
+# print(config.spreadsheet.fetch_sheet_metadata(params = {"includeGridData": "true"}))
 
-# for page in game_config_lite:
-#     print(type(page))
+# Все страницы конфига
+for page in config:
+    print(page.title)
 
-# gsconfig.tools.backup_config(game_config_lite, 'dev.backup', '_backup/')
-# gsconfig.tools.save_config_documents(game_config_lite, '_json/')
+# Только актуальные к экспорту страницы
+for page in config.pages():
+    print(page.title)
+
+# Забрать содержимое конкретной страницы
+ws = config[".players.json"]
+print(type(ws))
+print(ws.get())
+
+# Сохранить все страницы конфига
+config.save('_json')

@@ -41,7 +41,7 @@ class GoogleOauth():
 
 class Page(object):
     """
-    Обёртка поверх gspread.Worksheet
+    Класс обёртка поверх gspread.Worksheet
     """
 
     def __init__(self, worksheet):
