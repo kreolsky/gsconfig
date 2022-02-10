@@ -214,15 +214,20 @@ class GameConfigLite(Document):
 
         return self._spreadsheet
 
-    def save(self, path=''):
-        for page in self.pages():
+    def save(self, path='', mode=''):
+        """
+        Если указано mode = 'full', то пытается сохранить все страницы.
+        ВАЖНО! Обычная страница обычно не подготовлена к сохранению и будет падать.
+        """
+        pages = self if mode == 'full' else self.pages()
+        for page in pages:
             tools.save_page(page, path)
 
 
 class GameConfig(object):
     """
     Обьект содержащий все конфиги указанные в настройках.
-    Принимает настройки как из гуглотаблицы так и в виде словаря вида. Если указано и то и то,
+    Принимает настройки как из гуглотаблицы так и в виде словаря. Если указано и то и то,
     то будет использован словарь.
 
     settings -- словарь с настройками.
