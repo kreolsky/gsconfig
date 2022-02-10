@@ -30,7 +30,7 @@ class Worksheet(object):
             'json': self.get_as_json,
             'csv': self.get_as_csv,
             'localization': self.get_as_localization}
-        self.comment_letter = ['#', '@']  # Символ комментария. Ключи маркированные "#" не экспортируются.
+        self.comment_letters = ['#', '@']  # Символ комментария. Ключи маркированные "#" не экспортируются.
 
     @property
     def rows(self):
@@ -55,11 +55,11 @@ class Worksheet(object):
     def __repr__(self):
         return json.dumps(self.get_page_data())
 
-    def set_comment_letter(self, comment_letter):
-        if not isinstance(comment_letter, list):
+    def set_comment_letters(self, comment_letters):
+        if not isinstance(comment_letters, list):
             raise GSConfigError(f'It have to be a list!')
 
-        self.comment_letter = comment_letter
+        self.comment_letters = comment_letters
 
     def get_all_values(self, raw_data=False):
         data_type = 'effectiveValue'
@@ -135,7 +135,7 @@ class Worksheet(object):
             bufer = {
                 key: config_to_json(value, to_num=to_num, unwrap_list=unwrap_list, is_text=is_text)
                 for key, value in zip(headers, values)
-                if not any([key.startswith(x) for x in self.comment_letter])
+                if not any([key.startswith(x) for x in self.comment_letters])
                 and len(key) > 0
             }
 
@@ -170,7 +170,7 @@ class Spreadsheet(object):
         self.id = self._source['spreadsheetId']
         self.url = self._source['spreadsheetUrl']
         self.ts = self._source['timestamp']
-        self.comment_letter = ['@', '#', '.'] # Эскпортитуются только страницы начинающиеся с этого символа.
+        self.comment_letters = ['@', '#', '.'] # Эскпортитуются только страницы начинающиеся с этого символа.
         self.notice = ''
         self._pages = None
 
@@ -184,7 +184,7 @@ class Spreadsheet(object):
 
     def __iter__(self):
         for page in self.worksheets():
-            if any([page.title.startswith(x) for x in self.comment_letter]):
+            if any([page.title.startswith(x) for x in self.comment_letters]):
                 continue
 
             yield(page)
@@ -201,11 +201,11 @@ class Spreadsheet(object):
     def set_notice(self, notice):
         self.notice = notice
 
-    def set_comment_letter(self, comment_letter):
-        if not isinstance(comment_letter, list):
-            raise GSConfigError(f'It have to be a list!')
+    def set_comment_letters(self, comment_letters):
+        if not isinstance(comment_letters, list):
+            raise GSConfigError(f'It has to be a list!')
 
-        self.comment_letter = comment_letter
+        self.comment_letters = comment_letters
 
     def worksheets(self):
         """
@@ -230,26 +230,34 @@ class Spreadsheet(object):
 
 
 class GSpreadsheet():
-    def __init__(self, client, gspread_id):
+    def __init__(self, client, spreadsheet_id):
         self.client = client  # Обьект авторизации в гугле GoogleOauth
-        self.gspread_id = gspread_id  # ID гуглотаблицы
-        self._local_gspread_obj = None
+        self.spreadsheet_id = spreadsheet_id  # ID гуглотаблицы
+        self._spreadsheet = None
 
-    def pull(self):
+    def __repr__(self):
+        return f"<{self.__class__.__name__} '{self.title}' id:{self.spreadsheet_id}>"
+
+    def __iter__(self):
+        for page in self.spreadsheet:
+            yield page
+
+    def __getitem__(self, title):
+        return self.spreadsheet[title]
+
+    @property
+    def spreadsheet(self):
         """
         Возвращает обьект Spreadsheet.
         """
-        if not self._local_gspread_obj:
-            gspread_obj = self.client.connect.open_by_key(self.gspread_id)
-            local_gspread_json = gspread_obj.fetch_sheet_metadata(include_grid_data='true')  # Весь документ
+        if not self._spreadsheet:
+            gspread = self.client.connect.open_by_key(self.spreadsheet_id)
+            local_gspread_json = gspread.fetch_sheet_metadata(params = {"includeGridData": "true"})  # Весь документ
             local_gspread_json['timestamp'] = str(datetime.now())
 
-            self._local_gspread_obj = Spreadsheet(local_gspread_json)
+            self._spreadsheet = Spreadsheet(local_gspread_json)
 
-        return self._local_gspread_obj
-
-    def __repr__(self):
-        return f'<{self.__class__.__name__} from: {self.gspread_id}>'
+        return self._spreadsheet
 
 
 class GoogleOauth():
@@ -271,37 +279,21 @@ class GoogleOauth():
         return self._google_auth
 
 
-class GameConfigLite(object):
-    def __init__(self, client, gspread_id):
-        self.client = client
-        self.gspread_id = gspread_id
-        self._document = None
+class GameConfigLite(GSpreadsheet):
+    def save_config(self):
+        pass
 
-    def __repr__(self):
-        return self.document.__repr__()
+    def save_backup(self, path=''):
+        pass
 
-    def __iter__(self):
-        for page in self.document:
-            yield(page)
+    def backup_load(self, path=''):
+        pass
 
-    def __getitem__(self, title):
-        return self.document[title]
-
-    @property
-    def document(self):
-        if not self._document:
-            self.pull()
-
-        return self._document
-
-    def pull(self):
-        if not self._document:
-            self._document = GSpreadsheet(self.client, self.gspread_id).pull()
-
-        return self._document
+    def pages(self):
+        pass
 
     def get_raw_data(self):
-        return self.document.get_raw_data()
+        return self.spreadsheet.get_raw_data()
 
 
 class GameConfig(object):

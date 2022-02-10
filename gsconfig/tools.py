@@ -18,7 +18,7 @@ def save_zipped_file(filename, data):
     with bz2.BZ2File(filename, 'wb') as file:
         pickle.dump(data, file)
 
-def load_source_from_backup(filename):
+def load_from_backup(filename):
     """
     ВАЖНО!
     Возвращает только список исходников (словарей) всех страниц из бекапа.
@@ -29,7 +29,7 @@ def load_source_from_backup(filename):
 
     return data
 
-def save_config_documents(config, path=''):
+def save_config(config, path=''):
     """
     config -- обьект GameConfig or
     Сохраняет все страницы всех документов в отдельные файлы по указанному пути
