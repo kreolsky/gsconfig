@@ -22,10 +22,11 @@ for page in config.pages():
     print(page.title)
 
 # Забрать содержимое конкретной страницы
-ws = config[".players.json"]
-print(type(ws))
-print(ws.get())
-print(ws.get_as_raw())
+page = config["players.json"]
+print(type(page))
+print(page.get())
+print(page.get(mode='raw'))
+print(page.get(format='csv'))
 
 # Сохранить все страницы конфига
-config.save('_json')
+# config.save('_json')

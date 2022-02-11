@@ -16,7 +16,7 @@ def save_page(page, path=''):
     if not isinstance(page, classes.Page):
         raise classes.GSConfigError('Object must be of Page type!')
 
-    return save_page_function[page.type](page.get(), page.title, path)
+    return save_page_function[page.format](page.get(), page.title, path)
 
 def save_as_csv(data, title, path):
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:

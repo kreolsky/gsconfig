@@ -48,8 +48,7 @@ class Page(object):
         self.worksheet = worksheet # исходный обьект gspread.Worksheet
         self._data_parser = {
             'json': self.get_as_json,
-            'csv': self.get_as_csv,
-            'raw': self.get_as_raw}
+            'csv': self.get_as_csv}
         # Ключи маркированные этими символами не экспортируются.
         self.key_skip_letters = []
 
@@ -58,12 +57,17 @@ class Page(object):
         return self.worksheet.title
 
     @property
-    def type(self):
+    def format(self):
+        """
+        Определяет формат данных по названию страницы.
+        Если ничего не указано, то пытается взять как csv
+        """
+
         title_type_list = self.title.split('.')
         if len(title_type_list) > 1:
             return title_type_list[-1]
 
-        return 'json'
+        return 'csv'
 
     def __repr__(self):
         return json.dumps(self.get())
@@ -78,23 +82,35 @@ class Page(object):
             raise GSConfigError(f'It has to be a list!')
         self.key_skip_letters = key_skip_letters
 
-    def get(self, page_type=None, raw_data=False):
+    def get(self, format=None, mode=None):
         """
-        Достаёт данные со страницы данные в формете адекватном их типу.
-        Если тип не указан отдельно и не задан пользователем пытается достать как json.
+        Достаёт данные со страницы в формате адекватном их типу.
+        Если формат не указан отдельно и не задан пользователем, то пытается достать как csv
+        format - формат хранения данных json / csv / raw
+            json - собирает в словарь и парсит значения
+            csv - возвращает данные как список списков (строк документа). Всегда БЕЗ парсинга!
+        mode - указание парсить данные или нет
+            raw - данные будут возвращены БЕЗ парсинга
         """
 
-        page_type = page_type or self.type
-        return self._data_parser[page_type]()
+        is_raw = mode == 'raw'
+        format = format or self.format
+
+        return self._data_parser[format](is_raw = is_raw)
 
     def get_as_json(self, key='key', value='value', **params):
         """
-        Парсит данные со страницы гуглодоки в формат JSON.
-        См. parser.config_to_json
+        Парсит данные со страницы гуглодоки в формат JSON. См. parser.config_to_json
+        Понимает два формата:
+            1. Документ в две колонки key \ value
+            2. Свободный формат. Первая строка ключи, все остальные строки - значения
 
-        key - заголовок столбца с ключами
+        Проверка форматов по очереди, если в первой строке нет ОБОИХ ключей key \ value,
+        то считает сободным форматом.
+
+        key - заголовок столбца с ключами для формата в 2 колонки
         value - заголовок столбца с данными
-        **params - все параметры доступные функции parser.config_to_json парсера
+        **params - все параметры доступные для парсера parser.config_to_json
         """
 
         page_data = self.worksheet.get_all_values()
@@ -129,10 +145,7 @@ class Page(object):
 
         return out
 
-    def get_as_raw(self, **params):
-        return self.get_as_json(is_raw=True, **params)
-
-    def get_as_csv(self):
+    def get_as_csv(self, **params):
         return self.worksheet.get_all_values()
 
 
@@ -196,6 +209,7 @@ class GameConfigLite(Document):
     """
     Игровой конфиг состоящий только из одной гуглотаблички.
     """
+
     def __init__(self, client, spreadsheet_id):
         self.client = client  # Обьект авторизации в гугле GoogleOauth
         self.spreadsheet_id = spreadsheet_id  # ID гуглотаблицы
@@ -216,9 +230,10 @@ class GameConfigLite(Document):
 
     def save(self, path='', mode=''):
         """
-        Если указано mode = 'full', то пытается сохранить все страницы.
-        ВАЖНО! Обычная страница обычно не подготовлена к сохранению и будет падать.
+        Если указано mode = 'full', то пытается сохранить все страницы документа.
+        ВАЖНО! Рабочие страницы обычно не подготовлены к сохранению и будут падать.
         """
+
         pages = self if mode == 'full' else self.pages()
         for page in pages:
             tools.save_page(page, path)
