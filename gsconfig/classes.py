@@ -3,8 +3,6 @@ import os
 import json
 import re
 from datetime import datetime
-
-from oauth2client.service_account import ServiceAccountCredentials
 from concurrent.futures import ThreadPoolExecutor
 
 from .parser import config_to_json
@@ -18,25 +16,6 @@ class GSConfigError(Exception):
 
     def __str__(self):
         return f'{self.text} Err no. {self.value}'
-
-
-class GoogleOauth():
-    def __init__(self, oauth2_token_file_path):
-        self._key_file_path = oauth2_token_file_path
-        self._google_auth = None
-
-    @property
-    def connect(self):
-        if not self._google_auth:
-            scope = [
-                'https://www.googleapis.com/auth/spreadsheets',
-                'https://www.googleapis.com/auth/drive',
-                'https://www.googleapis.com/auth/drive.file'
-                ]
-            credentials = ServiceAccountCredentials.from_json_keyfile_name(self._key_file_path, scope)
-            self._google_auth = gspread.authorize(credentials)
-
-        return self._google_auth
 
 
 class Page(object):
@@ -54,20 +33,36 @@ class Page(object):
 
     @property
     def title(self):
+        """
+        Заголовок страницы как есть, то как называется страница в таблице
+        """
+
         return self.worksheet.title
+
+    @property
+    def name(self):
+        """
+        Название страницы. Из title удален суффикс определяющий формат данных
+        """
+
+        name = self.title
+        if any([name.endswith(f'.{key}') for key in self._data_parser.keys()]):
+            name = name[0 : name.rfind('.')]
+
+        return name
 
     @property
     def format(self):
         """
         Определяет формат данных по названию страницы.
-        Если ничего не указано, то пытается взять как csv
+        Если ничего не указано, то определяет как csv
         """
 
-        title_type_list = self.title.split('.')
-        if len(title_type_list) > 1:
-            return title_type_list[-1]
+        format = 'csv'
+        if any([self.title.endswith(f'.{key}') for key in self._data_parser.keys()]):
+            format = self.title[self.title.rfind('.') + 1 : ]
 
-        return 'csv'
+        return format
 
     def __repr__(self):
         return json.dumps(self.get())
@@ -210,8 +205,8 @@ class GameConfigLite(Document):
     Игровой конфиг состоящий только из одной гуглотаблички.
     """
 
-    def __init__(self, client, spreadsheet_id):
-        self.client = client  # Обьект авторизации в гугле GoogleOauth
+    def __init__(self, spreadsheet_id, client=None):
+        self.client = client or gspread.oauth() # Обьект авторизации в гугле GoogleOauth
         self.spreadsheet_id = spreadsheet_id  # ID гуглотаблицы
         self._spreadsheet = None
         self.page_skip_letters = ['#', '.']
@@ -224,7 +219,7 @@ class GameConfigLite(Document):
         """
 
         if not self._spreadsheet:
-            self._spreadsheet = self.client.connect.open_by_key(self.spreadsheet_id)
+            self._spreadsheet = self.client.open_by_key(self.spreadsheet_id)
 
         return self._spreadsheet
 

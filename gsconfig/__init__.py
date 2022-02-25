@@ -1,4 +1,3 @@
-from .classes import GoogleOauth
 from .classes import GameConfig
 from .classes import GameConfigLite
 

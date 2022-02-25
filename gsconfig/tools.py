@@ -18,22 +18,26 @@ def save_page(page, path=''):
 
     return save_page_function[page.format](page.get(), page.title, path)
 
-def save_as_csv(data, title, path):
+def save_csv(data, title, path):
+    if not title.endswith('.csv'):
+        title = f'{title}.csv'
+
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         for line in data:
             writer = csv.writer(file, quoting=csv.QUOTE_ALL)
             writer.writerow(line)
 
-def save_as_json(data, title, path):
-    title = ''.join(title.split(".")[:-1]) + '.json'
+def save_json(data, title, path):
+    if not title.endswith('.json'):
+        title = f'{title}.json'
 
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         json.dump(data, file, indent = 2, ensure_ascii = False)
 
 save_page_function = {
-    'json': save_as_json,
-    'csv': save_as_csv,
-    'raw': save_as_json
+    'json': save_json,
+    'csv': save_csv,
+    'raw': save_json
     }
 
 def dict_to_str(source, tab='', count=0):
