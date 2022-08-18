@@ -5,7 +5,6 @@ import re
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-from .parser import config_to_json
 from . import tools
 
 
@@ -17,19 +16,24 @@ class GSConfigError(Exception):
     def __str__(self):
         return f'{self.text} Err no. {self.value}'
 
+parsers = {
+    'raw': tools.parser_dummy,
+    'csv': tools.parser_dummy,
+    'json': tools.parser_json
+}
 
 class Page(object):
     """
     Класс обёртка поверх gspread.Worksheet
     """
 
-    def __init__(self, worksheet):
+    def __init__(self, worksheet, parsers = parsers):
         self.worksheet = worksheet # исходный обьект gspread.Worksheet
-        self._data_parser = {
-            'json': self.get_as_json,
-            'csv': self.get_as_csv}
+        self.parsers = parsers
+
         # Ключи маркированные этими символами не экспортируются.
         self.key_skip_letters = []
+        self.cache = None
 
     @property
     def title(self):
@@ -42,12 +46,14 @@ class Page(object):
     @property
     def name(self):
         """
-        Название страницы. Из title удален суффикс определяющий формат данных
+        Название страницы.
+        Из title удален суффикс определяющий формат данных,
+        если для него указан парсер
         """
 
         name = self.title
-        if any([name.endswith(f'.{key}') for key in self._data_parser.keys()]):
-            name = name[0 : name.rfind('.')]
+        if any([name.endswith(f'.{x}') for x in self.parsers.keys()]):
+            name = name[ : name.rfind('.')]
 
         return name
 
@@ -55,11 +61,11 @@ class Page(object):
     def format(self):
         """
         Определяет формат данных по названию страницы.
-        Если ничего не указано, то определяет как csv
+        Если ничего не указано, то определяет как raw
         """
 
-        format = 'csv'
-        if any([self.title.endswith(f'.{key}') for key in self._data_parser.keys()]):
+        format = 'raw'
+        if any([self.title.endswith(f'.{x}') for x in self.parsers.keys()]):
             format = self.title[self.title.rfind('.') + 1 : ]
 
         return format
@@ -77,76 +83,31 @@ class Page(object):
             raise GSConfigError(f'It has to be a list!')
         self.key_skip_letters = key_skip_letters
 
-    def get(self, format=None, mode=None):
+    def get(self, format=None, mode=None, **params):
         """
         Достаёт данные со страницы в формате адекватном их типу.
-        Если формат не указан отдельно и не задан пользователем, то пытается достать как csv
-        format - формат хранения данных json / csv / raw
+        Если формат не указан отдельно и не задан пользователем, то пытается достать как raw
+        format - формат хранения данных
             json - собирает в словарь и парсит значения
-            csv - возвращает данные как список списков (строк документа). Всегда БЕЗ парсинга!
+            csv - возвращает данные как двумерный массив. Всегда БЕЗ парсинга!
+            raw - возвращает данные как двумерный массив. Всегда БЕЗ парсинга!
         mode - указание парсить данные или нет
-            raw - данные будут возвращены БЕЗ парсинга
+            raw - данные всегда будут возвращены БЕЗ парсинга
         """
 
-        is_raw = mode == 'raw'
+        if not self.cache:
+            self.cache = self.worksheet.get_all_values()
+
+        params['is_raw'] = mode == 'raw'
+        params['key_skip_letters'] = self.key_skip_letters
         format = format or self.format
 
-        return self._data_parser[format](is_raw = is_raw)
-
-    def get_as_json(self, key='key', value='value', **params):
-        """
-        Парсит данные со страницы гуглодоки в формат JSON. См. parser.config_to_json
-        Понимает два формата:
-            1. Документ в две колонки key \ value
-            2. Свободный формат. Первая строка ключи, все остальные строки - значения
-
-        Проверка форматов по очереди, если в первой строке нет ОБОИХ ключей key \ value,
-        то считает сободным форматом.
-
-        key - заголовок столбца с ключами для формата в 2 колонки
-        value - заголовок столбца с данными
-        **params - все параметры доступные для парсера parser.config_to_json
-        """
-
-        page_data = self.worksheet.get_all_values()
-
-        headers = page_data[0]
-        data = page_data[1:]
-
-        # Если документ из двух колонок. Ключами в столбце key и значением в столбце value
-        if key in headers and value in headers:
-            key_index = headers.index(key)
-            value_index = headers.index(value)
-
-            out = {
-                line[key_index]: config_to_json(line[value_index], **params)
-                for line in data if len(line[0]) > 0
-            }
-
-            return out
-
-        # Первая строка с заголовками, остальные строки с данными
-        out = []
-        for values in data:
-            bufer = {
-                key: config_to_json(value, **params)
-                for key, value in zip(headers, values)
-                if not any([key.startswith(x) for x in self.key_skip_letters]) and len(key) > 0
-            }
-            out.append(bufer)
-
-        if len(out) == 1:
-            out = out[0]
-
-        return out
-
-    def get_as_csv(self, **params):
-        return self.worksheet.get_all_values()
+        return self.parsers[format](self.cache, **params)
 
 
 class Document(object):
     """
-    Класс обертка поверх gspread.Spreadsheet.
+    Класс обертка поверх gspread.Spreadsheet
     """
 
     def __init__(self, spreadsheet):
@@ -155,7 +116,7 @@ class Document(object):
         self.key_skip_letters = []
 
     def __repr__(self):
-        return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet_id}>"
+        return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet.id}>"
 
     def __getitem__(self, title):
         page = Page(self.spreadsheet.worksheet(title))

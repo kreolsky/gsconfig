@@ -6,6 +6,59 @@ import bz2
 import os
 
 from . import classes
+from .parser import config_to_json
+
+def parser_dummy(page_data, **params):
+    return page_data
+
+def parser_json(page_data, **params):
+    """
+    Парсит данные со страницы гуглодоки в формат JSON. См. parser.config_to_json
+    Понимает два формата:
+        1. Документ в две колонки key \ value
+        2. Свободный формат. Первая строка ключи, все остальные строки - значения
+
+    Проверка форматов по очереди, если в первой строке нет ОБОИХ ключей key \ value,
+    то считает сободным форматом.
+
+    key - заголовок столбца с ключами для формата в 2 колонки
+    value - заголовок столбца с данными
+    **params - все параметры доступные для парсера parser.config_to_json
+    """
+
+    key = params.get('key', 'key')
+    value = params.get('value', 'value')
+    key_skip_letters = params.get('key_skip_letters', [])
+
+    headers = page_data[0]
+    data = page_data[1:]
+
+    # Если документ из двух колонок. Ключами в столбце key и значением в столбце value
+    if key in headers and value in headers:
+        key_index = headers.index(key)
+        value_index = headers.index(value)
+
+        out = {
+            line[key_index]: config_to_json(line[value_index], **params)
+            for line in data if len(line[0]) > 0
+        }
+
+        return out
+
+    # Первая строка с заголовками, остальные строки с данными
+    out = []
+    for values in data:
+        bufer = {
+            key: config_to_json(value, **params)
+            for key, value in zip(headers, values)
+            if not any([key.startswith(x) for x in key_skip_letters]) and len(key) > 0
+        }
+        out.append(bufer)
+
+    if len(out) == 1:
+        out = out[0]
+
+    return out
 
 def save_page(page, path=''):
     """
@@ -13,10 +66,12 @@ def save_page(page, path=''):
     page - обьект Page
     path - путь сохранения обьекта
     """
+
     if not isinstance(page, classes.Page):
         raise classes.GSConfigError('Object must be of Page type!')
 
-    return save_page_function[page.format](page.get(), page.title, path)
+    save_func = save_page_functions.get(page.format, save_csv)
+    return save_func(page.get(), page.name, path)
 
 def save_csv(data, title, path):
     if not title.endswith('.csv'):
@@ -34,10 +89,8 @@ def save_json(data, title, path):
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         json.dump(data, file, indent = 2, ensure_ascii = False)
 
-save_page_function = {
+save_page_functions = {
     'json': save_json,
-    'csv': save_csv,
-    'raw': save_json
     }
 
 def dict_to_str(source, tab='', count=0):

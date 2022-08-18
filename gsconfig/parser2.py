@@ -73,7 +73,7 @@ def parse_string(s, to_num=True):
     except (ValueError, SyntaxError):
         return s
 
-def parse_block(string, is_from_dict, **params):
+def parse_block(string, list_it, **params):
     """
     Используется внутри функции базовой функции config_to_json.
     Парсит блок (фрагмент исходной строки для разбора) разделенный запятыми.
@@ -87,7 +87,7 @@ def parse_block(string, is_from_dict, **params):
     to_num - нужно ли пытаться преобразовывать значения в числа.
     True (по умолчанию) - пытается преобразовать.
 
-    is_unwrap - нужно ли вытаскивать словари из списков единичной длины.
+    unwrap_list - нужно ли вытаскивать словари из списков единичной длины.
     False (по умолчанию) - вытаскивает из списков все обьекты КРОМЕ словарей.
     True - вынимает из список ВСЕ типы обьектов, включая словари.
 
@@ -103,22 +103,25 @@ def parse_block(string, is_from_dict, **params):
     out_dict = {}
 
     for line in split_string_by_sep(string, params['sep_base'], **params):
+
         # Проверка нужно ли вообще парсить строку
         if line.startswith(raw_pattern):
             out.append(line[1:-1])
 
         # Проверка наличия блока. Блок всегда начинается с открывающей скобки блока
         elif line.startswith(br[0]):
-            # Внутренний блок всегда разворачиваем из лишних списков.
-            # Кроме случая когда пришли из разбора словаря.
-            # Иначе лезут паразитные вложения.
-            substring = config_to_json(line[1:-1], is_from_dict, **params) or []
+            # По умолчанию всегда разворачиваем списки
+            # Заворачиваем только тогда, если есть указание в ключе
+            substring = config_to_json(line[1:-1], list_it, **params) or []
             out.append(substring)
 
         # Проверка на словарь
         elif sep_dict in line:
             key, substring = split_string_by_sep(line, sep_dict, **params)
-            out_dict[key] = config_to_json(substring, is_from_dict=True, **params)
+            list_it = key.endswith('[]')
+            key = key.strip('[]')
+
+            out_dict[key] = config_to_json(substring, list_it, **params)
 
         # Остались только строки
         else:
@@ -133,7 +136,7 @@ def parse_block(string, is_from_dict, **params):
     return out
 
 
-def config_to_json(string, is_from_dict=False, **params):
+def config_to_json(string, list_it=False, **params):
     """
     Парсит строку конфига и складывает результат в список словарей.
     Исходный формат крайне упрощенная и менее формальная версия JSON.
@@ -142,16 +145,16 @@ def config_to_json(string, is_from_dict=False, **params):
 
     string - исходная строка для разбора.
 
+    list_it - флаг нажно ли запорачивать значение в словаре, для всех ключей,
+    которые занканчиваются на '[]' значение будет завернуто в список.
+    ВАЖНО! Если это уже список длины больше чем 1, то он не будет дополнительно завернут!
+
     br - тип скобок выделяющих подблоки. '{}' по умолчанию.
     sep_dict - разделитель ключ\значение элементов словаря. '=' по умолчанию.
     sep_block - разделитель блоков. Синтаксический сахар
 
     to_num - нужно ли пытаться преобразовывать значения в числа.
-    True (по учаолчанию) пытается преобразовать.
-
-    is_unwrap - нужно ли вытаскивать словари из списков единичной длины.
-    False (по умолчанию) вытаскивает из списков все обьекты КРОМЕ словарей.
-    True - вынимает из список ВСЕ типы обьектов, включая словари.
+    True (по учаолчанию) - пытается преобразовать.
 
     raw_pattern - символ маркирующий строку которую не нужно разбирать, по умолчанию двойная кавычка '"'
     Строки начинающиеся с символа raw_pattern не парсятся и сохраняются как есть.
@@ -178,19 +181,15 @@ def config_to_json(string, is_from_dict=False, **params):
     params['to_num'] = params.get('to_num', True)
     params['raw_pattern'] = params.get('raw_pattern', '"')
     params['is_raw'] = params.get('is_raw', False)
-    params['is_unwrap'] = params.get('is_unwrap', False)
 
     if params['is_raw']:
         return string
 
     out = []
     for line in split_string_by_sep(string, params['sep_block'], **params):
-        out.append(parse_block(line, is_from_dict=False, **params))
+        out.append(parse_block(line, list_it=False, **params))
 
-    # Все, что длины 1 и внутри не словарь разворачиваем по умолчанию.
-    # Для словарей дополнительная проверка что не нужно разворачивать по умолчанию,
-    # и пришли не из разбора словаря
-    if len(out) == 1 and (type(out[0]) not in (dict, ) or not is_from_dict or params['is_unwrap']):
+    if len(out) == 1 and (type(out[0]) in (list, ) or not list_it):
         return out[0]
 
     return out
@@ -199,10 +198,10 @@ if __name__ == '__main__':
     # https://habr.com/post/309242/
 
     string = [
-        '{life = {}}',
-        'one = two, item = {itemsCount = 4.5, price = 100.123456, name = {name1 = my_name, second = other}}, six = {name3 = my_thirs_name, second = other}, test = {itemsCount = 4, price = 100, name = {{itemsCount = 4, price = 100}, name = {count = 4, total = 10}}}, count = 4, total = 10',
-        '9.1, 6.0, 6| 7 = 7, zero = 0, one, two = {2 = dva}, tree = {2 = dva | 3 = tree} | a, b, f',
-        '{9.1, 6.0, 6}, {7 = 7, zero = 0, one, two = {2 = dva}, tree = {{2 = dva}, {3 = tree}}}, {a, b, f}',
+        # '{life = {}}',
+        'one[] = two, item = {itemsCount = 4.5, price = 100.123456, name[] = {name1 = my_name, second = other}}, six[] = {name3 = my_thirs_name, second = other}, test = {itemsCount = 4, price = 100, name[] = {{itemsCount = 4, price = 100}, name[] = {count = 4, total = 10}}}, count = 4, total[] = 10',
+        '9.1, 6.0, 6| 7 = 7, zero = 0, one, two[] = {2 = dva}, tree = {2 = dva | 3 = tree} | a, b, f',
+        '{9.1, 6.0, 6}, {7 = 7, zero = 0, one, two[] = {2 = dva}, tree = {{2 = dva}, {3 = tree}}}, {a, b, f}',
         # 'five = {three = 3, two = 2}',
         # 'life',
         # '{life = {TRUE}}',
@@ -215,6 +214,7 @@ if __name__ == '__main__':
         # 'name = {{itemsCount = 4, price = 100}, name = {count = 4, total = FALSE}}',
         # 'id = act00040, trigger = {and = {eq = {08.04.2019, now} | more = {50, hands} | or = {more = {10, consecutiveDays} | more = {100, gold}}}} | id = act00050, trigger = {and = {more = {50, hands}}}',
         # 'id = act00040, trigger = {and = {eq = {now = 10.04.2019} | more = {hands = 50} | or = {more = {consecutiveDays = 50} | more = {gold = 100}}}} | id = act00050, trigger = {and = {more = {hands = 50}}}',
+        # '{life = {}}',
         # 'a = nan',
         # 'popup_icon = {left = -1, top = -28}, widget_icon = {{pen, 0, 0, 0}, {sample, 8, 8, 8}, top = 10}, mobile_banner = {title_position = {left = "0x90532022", "oppa", "work!", right = 10, top = 11}}, popup_scheme = "0xFF000000,0xFF000000,0xFF000000,0x30c77263,0xFFf56b45,0xFF152645,0xFFe48f72,0xFF3d407a,0xFF000000"',
         # '"payload.cash_delta_ratio", ">=", 10"o"0 | payload.bankroll_delta, ">=", 50000',
@@ -236,7 +236,7 @@ if __name__ == '__main__':
         ]
 
     for line in string:
-        print(json.dumps(config_to_json(line, is_unwrap=False), indent=4))
+        print(json.dumps(config_to_json(line), indent=4))
         print('--------------------')
 
 
