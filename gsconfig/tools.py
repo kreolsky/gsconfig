@@ -4,7 +4,7 @@ import ast
 import pickle
 import bz2
 import os
-from gsparser import parser
+import gsparser
 
 from . import classes
 
@@ -39,7 +39,7 @@ def parser_json(page_data, **params):
         value_index = headers.index(value)
 
         out = {
-            line[key_index]: parser.config_to_json(line[value_index], **params)
+            line[key_index]: gsparser.jsonify(line[value_index], **params)
             for line in data if len(line[0]) > 0
         }
 
@@ -49,7 +49,7 @@ def parser_json(page_data, **params):
     out = []
     for values in data:
         bufer = {
-            key: parser.config_to_json(value, **params)
+            key: gsparser.jsonify(value, **params)
             for key, value in zip(headers, values)
             if not any([key.startswith(x) for x in key_skip_letters]) and len(key) > 0
         }
