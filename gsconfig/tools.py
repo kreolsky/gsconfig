@@ -4,7 +4,7 @@ import ast
 import pickle
 import bz2
 import os
-import gsparser import parser
+from gsparser import parser
 
 from . import classes
 
@@ -91,7 +91,7 @@ def save_json(data, title, path):
 
 save_page_functions = {
     'json': save_json,
-    }
+}
 
 def dict_to_str(source, tab='', count=0):
     output = ''

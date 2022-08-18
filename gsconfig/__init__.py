@@ -3,7 +3,6 @@ from .classes import GameConfigLite
 
 from . import classes
 from . import tools
-from . import parser
 
 """
 gsconfig
