@@ -48,15 +48,12 @@ def parser_json(page_data, **params):
     # Первая строка с заголовками, остальные строки с данными
     out = []
     for values in data:
-        bufer = {
-            key: gsparser.jsonify(value, **params)
-            for key, value in zip(headers, values)
+        bufer = [
+            f'{key} = {{{str(value)}}}' for key, value in zip(headers, values)
             if not any([key.startswith(x) for x in key_skip_letters]) and len(key) > 0
-        }
+        ]
+        bufer = gsparser.jsonify(', '.join(bufer), **params)
         out.append(bufer)
-
-    if len(out) == 1:
-        out = out[0]
 
     return out
 

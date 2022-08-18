@@ -34,6 +34,7 @@ class Page(object):
         # Ключи маркированные этими символами не экспортируются.
         self.key_skip_letters = []
         self.cache = None
+        self.parser_mode = None
 
     @property
     def title(self):
@@ -100,6 +101,7 @@ class Page(object):
 
         params['is_raw'] = mode == 'raw'
         params['key_skip_letters'] = self.key_skip_letters
+        params['mode'] = self.parser_mode
         format = format or self.format
 
         return self.parsers[format](self.cache, **params)
@@ -113,7 +115,7 @@ class Document(object):
     def __init__(self, spreadsheet):
         self.spreadsheet = spreadsheet # Исходный обьект gspread.Spreadsheet
         self.page_skip_letters = []
-        self.key_skip_letters = []
+        # self.key_skip_letters = []
 
     def __repr__(self):
         return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet.id}>"
@@ -121,13 +123,24 @@ class Document(object):
     def __getitem__(self, title):
         page = Page(self.spreadsheet.worksheet(title))
         page.set_key_skip_letters(self.key_skip_letters)
+        page.parser_mode = self.parser_mode
         return page
 
     def __iter__(self):
         for page in self.spreadsheet.worksheets():
             page = Page(page)
             page.set_key_skip_letters(self.key_skip_letters)
+            page.parser_mode = self.parser_mode
             yield page
+
+    @property
+    def page1(self):
+        """
+        Возвращает первую основную страницу их тех,
+        которые НЕ начинаются с символов в page_skip_letters.
+        """
+        for page in self.pages():
+            return page
 
     def set_page_skip_letters(self, page_skip_letters):
         """
@@ -169,9 +182,10 @@ class GameConfigLite(Document):
     def __init__(self, spreadsheet_id, client=None):
         self.client = client or gspread.oauth() # Обьект авторизации в гугле GoogleOauth
         self.spreadsheet_id = spreadsheet_id  # ID гуглотаблицы
-        self._spreadsheet = None
+        self.cache = None
         self.page_skip_letters = ['#', '.']
         self.key_skip_letters = ['#', '.']
+        self.parser_mode = 'v1'
 
     @property
     def spreadsheet(self):
@@ -179,10 +193,10 @@ class GameConfigLite(Document):
         Возвращает обьект gspread.Spreadsheet
         """
 
-        if not self._spreadsheet:
-            self._spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+        if not self.cache:
+            self.cache = self.client.open_by_key(self.spreadsheet_id)
 
-        return self._spreadsheet
+        return self.cache
 
     def save(self, path='', mode=''):
         """
