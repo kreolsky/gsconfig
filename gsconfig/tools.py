@@ -33,7 +33,8 @@ def parser_json(page_data, **params):
     headers = page_data[0]
     data = page_data[1:]
 
-    # Если документ из двух колонок. Ключами в столбце key и значением в столбце value
+    # Если документ из двух колонок.
+    # Ключами в столбце key и значением в столбце value
     if key in headers and value in headers:
         key_index = headers.index(key)
         value_index = headers.index(value)
@@ -54,6 +55,11 @@ def parser_json(page_data, **params):
         ]
         bufer = gsparser.jsonify(', '.join(bufer), **params)
         out.append(bufer)
+
+    # Оставлено как совместимость с первой версией
+    # Если в результате только один словарь, он не заворачивается
+    if len(out) == 1:
+        return out[0]
 
     return out
 
