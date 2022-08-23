@@ -20,13 +20,13 @@ config.parser_mode = 'v2'
 for page in config.pages():
     print(page.title, page.name, page.format, type(page))
 
-# Забрать содержимое конкретной страницы
+# Забрать содержимое конкретной (первой в списке) страницы
 page = config.page1
 # print(page.parser_mode)
 # print(type(page))
 print(page.get())
 print(page.get(mode='raw'))
-# print(page.get(format='csv', mode='raw'))
+# print(page.get(format='csv'))
 
 # Сохранить все страницы конфига
 config.save('_json')

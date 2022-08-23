@@ -114,7 +114,7 @@ class Document(object):
 
     def __init__(self, spreadsheet):
         self.spreadsheet = spreadsheet # Исходный обьект gspread.Spreadsheet
-        self.page_skip_letters = []
+        # self.page_skip_letters = []
         # self.key_skip_letters = []
 
     def __repr__(self):
@@ -241,7 +241,7 @@ class GameConfig(object):
 
         elif 'spreadsheet_id' in settings:
             self._settings_gspread_id = settings['spreadsheet_id']
-            self._settingspage_name= settings['page_title']
+            self._settingspage_name = settings['page_title']
 
         elif settings:
             self._settings = {
