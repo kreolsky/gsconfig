@@ -3,72 +3,98 @@ import csv
 import ast
 import pickle
 import bz2
+import os
+import gsparser
 
 from . import classes
 
-def backup_config(config, name, path=''):
-    backup = {
-        'documents': [x.get_raw_data() for x in config.documents],
-        'settings': config.settings
+def parser_dummy(page_data, **params):
+    return page_data
+
+def parser_json(page_data, **params):
+    """
+    Парсит данные со страницы гуглодоки в формат JSON. См. parser.config_to_json
+    Понимает два формата:
+        1. Документ в две колонки key \ value
+        2. Свободный формат. Первая строка ключи, все остальные строки - значения
+
+    Проверка форматов по очереди, если в первой строке нет ОБОИХ ключей key \ value,
+    то считает сободным форматом.
+
+    key - заголовок столбца с ключами для формата в 2 колонки
+    value - заголовок столбца с данными
+    **params - все параметры доступные для парсера parser.config_to_json
+    """
+
+    key = params.get('key', 'key')
+    value = params.get('value', 'value')
+    key_skip_letters = params.get('key_skip_letters', [])
+
+    headers = page_data[0]
+    data = page_data[1:]
+
+    # Если документ из двух колонок.
+    # Ключами в столбце key и значением в столбце value
+    if key in headers and value in headers:
+        key_index = headers.index(key)
+        value_index = headers.index(value)
+
+        out = {
+            line[key_index]: gsparser.jsonify(line[value_index], **params)
+            for line in data if len(line[0]) > 0
         }
 
-    save_zipped_file(f'{path}/{name}', backup)
+        return out
 
-def save_zipped_file(filename, data):
-    with bz2.BZ2File(filename, 'wb') as file:
-        pickle.dump(data, file)
+    # Первая строка с заголовками, остальные строки с данными
+    out = []
+    for values in data:
+        bufer = [
+            f'{key} = {{{str(value)}}}' for key, value in zip(headers, values)
+            if not any([key.startswith(x) for x in key_skip_letters]) and len(key) > 0
+        ]
+        bufer = gsparser.jsonify(', '.join(bufer), **params)
+        out.append(bufer)
 
-def load_from_backup(filename):
+    # Оставлено как совместимость с первой версией
+    # Если в результате только один словарь, он не заворачивается
+    if len(out) == 1:
+        return out[0]
+
+    return out
+
+def save_page(page, path=''):
     """
-    ВАЖНО!
-    Возвращает только список исходников (словарей) всех страниц из бекапа.
-    Это НЕ обьект конфига!
-    """
-    with bz2.BZ2File(filename, 'rb') as file:
-        data = pickle.load(file)
-
-    return data
-
-def save_config(config, path=''):
-    """
-    config -- обьект GameConfig or
-    Сохраняет все страницы всех документов в отдельные файлы по указанному пути
-    """
-    if isinstance(config, classes.GameConfig):
-        for document in config:
-            for page in document:
-                _save_page(page, path)
-
-    elif isinstance(config, classes.Spreadsheet) or isinstance(config, classes.GameConfigLite):
-        for page in config:
-            _save_page(page, path)
-
-    else:
-        raise classes.GSConfigError('Object must be of GameConfig or Spreadsheet type!')
-
-def _save_page(page, path=''):
-    """
-    page -- обьект Worksheet
     Сохраняет страницу по указанному пути
+    page - обьект Page
+    path - путь сохранения обьекта
     """
-    if not isinstance(page, classes.Worksheet):
-        raise classes.GSConfigError('Object must be of Worksheet type!')
 
-    return save_page_function[page.type](page.get_page_data(), page.title, path)
+    if not isinstance(page, classes.Page):
+        raise classes.GSConfigError('Object must be of Page type!')
 
-def save_as_csv(data, title, path):
-    with open(path + title, 'w', encoding='utf-8') as file:
+    save_func = save_page_functions.get(page.format, save_csv)
+    return save_func(page.get(), page.name, path)
+
+def save_csv(data, title, path):
+    if not title.endswith('.csv'):
+        title = f'{title}.csv'
+
+    with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         for line in data:
             writer = csv.writer(file, quoting=csv.QUOTE_ALL)
             writer.writerow(line)
 
-def save_as_json(data, title, path):
-    title = ''.join(title.split(".")[:-1]) + '.json'
+def save_json(data, title, path):
+    if not title.endswith('.json'):
+        title = f'{title}.json'
 
-    with open(path + title, 'w', encoding='utf-8') as file:
+    with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         json.dump(data, file, indent = 2, ensure_ascii = False)
 
-save_page_function = {'json': save_as_json, 'csv': save_as_csv, 'localization': save_as_json}
+save_page_functions = {
+    'json': save_json,
+}
 
 def dict_to_str(source, tab='', count=0):
     output = ''
