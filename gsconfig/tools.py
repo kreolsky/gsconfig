@@ -1,12 +1,9 @@
 import json
 import csv
-import ast
-import pickle
-import bz2
 import os
 import gsparser
 
-from . import classes
+from . import classes as classes
 
 def parser_dummy(page_data, **params):
     return page_data

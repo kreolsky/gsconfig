@@ -1,7 +1,6 @@
 import gspread
 import json
 from concurrent.futures import ThreadPoolExecutor
-from functools import cached_property
 
 from . import tools
 
@@ -22,77 +21,76 @@ parsers = {
 
 class Page(object):
     """
-    Wrapper class for gspread.Worksheet
+    Класс обёртка поверх gspread.Worksheet
     """
 
-    def __init__(self, worksheet, parsers=parsers):
-        self.worksheet = worksheet  # Source gspread.Worksheet object
-        self.parsers = parsers or {}
-        self.key_skip_letters = set()
+    def __init__(self, worksheet, parsers = parsers):
+        self.worksheet = worksheet # исходный обьект gspread.Worksheet
+        self.parsers = parsers
+
+        # Ключи маркированные этими символами не экспортируются.
+        self.key_skip_letters = []
         self.cache = None
         self.parser_mode = None
-        self._name_and_format = None
 
     @property
     def title(self):
         """
-        Page title as is, the page name in the table
+        Заголовок страницы как есть, то как называется страница в таблице
         """
+
         return self.worksheet.title
 
     @property
     def name(self):
         """
-        Page name.
-        The title suffix determining the data format is removed,
-        if a parser is specified for it
+        Название страницы.
+        Из title удален суффикс определяющий формат данных,
+        если для него указан парсер
         """
-        if not self._name_and_format:
-            self._calculate_name_and_format()
-        return self._name_and_format["name"]
+
+        name = self.title
+        if any([name.endswith(f'.{x}') for x in self.parsers.keys()]):
+            name = name[ : name.rfind('.')]
+
+        return name
 
     @property
     def format(self):
         """
-        Determines the data format based on the page title.
-        If nothing is specified, it is determined as raw
+        Определяет формат данных по названию страницы.
+        Если ничего не указано, то определяет как raw
         """
-        if not self._name_and_format:
-            self._calculate_name_and_format()
-        return self._name_and_format["format"]
 
-    def _calculate_name_and_format(self):
-        name = self.title
         format = 'raw'
-        for parser_key in self.parsers.keys():
-            if name.endswith(f'.{parser_key}'):
-                name = name[:-len(parser_key) - 1]
-                format = parser_key
-                break
-        self._name_and_format = {"name": name, "format": format}
+        if any([self.title.endswith(f'.{x}') for x in self.parsers.keys()]):
+            format = self.title[self.title.rfind('.') + 1 : ]
+
+        return format
 
     def __repr__(self):
-        return json.dumps(self.get(), ensure_ascii=False)
+        return json.dumps(self.get())
 
     def set_key_skip_letters(self, key_skip_letters):
         """
-        Comment symbol for keys on config pages.
-        Keys starting with these symbols are not exported.
+        Символ комментария для ключей на страницах конфига.
+        Ключи начинающиеся с этих символов не экспортируются.
         """
-        if not isinstance(key_skip_letters, (list, set)):
-            raise TypeError('key_skip_letters must be a list or a set!')
-        self.key_skip_letters = set(key_skip_letters)
+
+        if not isinstance(key_skip_letters, list):
+            raise GSConfigError(f'It has to be a list!')
+        self.key_skip_letters = key_skip_letters
 
     def get(self, format=None, mode=None, **params):
         """
-        Retrieves data from the page in a format appropriate for its type.
-        If the format is not specified separately and not set by the user, it tries to get it as raw
-        format - data storage format
-            json - collects into a dictionary and parses values
-            csv - returns data as a two-dimensional array. Always WITHOUT parsing!
-            raw - returns data as a two-dimensional array. Always WITHOUT parsing!
-        mode - whether to parse data or not
-            raw - data will always be returned WITHOUT parsing
+        Достаёт данные со страницы в формате адекватном их типу.
+        Если формат не указан отдельно и не задан пользователем, то пытается достать как raw
+        format - формат хранения данных
+            json - собирает в словарь и парсит значения
+            csv - возвращает данные как двумерный массив. Всегда БЕЗ парсинга!
+            raw - возвращает данные как двумерный массив. Всегда БЕЗ парсинга!
+        mode - указание парсить данные или нет
+            raw - данные всегда будут возвращены БЕЗ парсинга
         """
 
         if not self.cache:
@@ -108,64 +106,63 @@ class Page(object):
 
 class Document(object):
     """
-    Wrapper class for gspread.Spreadsheet
+    Класс обертка поверх gspread.Spreadsheet
     """
 
     def __init__(self, spreadsheet):
-        self.spreadsheet = spreadsheet  # Source gspread.Spreadsheet object
-        self.page_skip_letters = set()
-        self.key_skip_letters = set()
-        self.parser_mode = None
+        self.spreadsheet = spreadsheet # Исходный обьект gspread.Spreadsheet
+        # self.page_skip_letters = []
+        # self.key_skip_letters = []
 
     def __repr__(self):
         return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet.id}>"
 
     def __getitem__(self, title):
-        return self._create_page(self.spreadsheet.worksheet(title))
-
-    def __iter__(self):
-        for page in self.spreadsheet.worksheets():
-            yield self._create_page(page)
-
-    def _create_page(self, worksheet):
-        page = Page(worksheet)
+        page = Page(self.spreadsheet.worksheet(title))
         page.set_key_skip_letters(self.key_skip_letters)
         page.parser_mode = self.parser_mode
         return page
 
+    def __iter__(self):
+        for page in self.spreadsheet.worksheets():
+            page = Page(page)
+            page.set_key_skip_letters(self.key_skip_letters)
+            page.parser_mode = self.parser_mode
+            yield page
+
     @property
     def page1(self):
         """
-        Returns the first main page among those
-        that do NOT start with symbols in page_skip_letters.
+        Возвращает первую основную страницу их тех,
+        которые НЕ начинаются с символов в page_skip_letters.
         """
         for page in self.pages():
             return page
 
     def set_page_skip_letters(self, page_skip_letters):
         """
-        Comment symbol for config pages.
-        Pages starting with these symbols are not exported.
+        Символ комментария для страниц конфига.
+        Страницы начинающиеся с этих символов не экспортируются.
         """
 
-        if not isinstance(page_skip_letters, (list, set)):
-            raise TypeError('page_skip_letters must be a list or a set!')
-        self.page_skip_letters = set(page_skip_letters)
+        if not isinstance(page_skip_letters, list):
+            raise GSConfigError(f'It has to be a list!')
+        self.page_skip_letters = page_skip_letters
 
     def set_key_skip_letters(self, key_skip_letters):
         """
-        Comment symbol for keys on config pages.
-        Keys starting with these symbols are not exported.
+        Символ комментария для ключей на страницах конфига.
+        Ключи начинающиеся с этих символов не экспортируются.
         """
 
-        if not isinstance(key_skip_letters, (list, set)):
-            raise TypeError('key_skip_letters must be a list or a set!')
-        self.key_skip_letters = set(key_skip_letters)
+        if not isinstance(key_skip_letters, list):
+            raise GSConfigError(f'It has to be a list!')
+        self.key_skip_letters = key_skip_letters
 
     def pages(self):
         """
-        This method returns only the main config pages.
-        Those that do NOT start with symbols in page_skip_letters.
+        Метод возвращает только основные страницы конфига.
+        Те, которые НЕ начинаются с символов в page_skip_letters.
         """
 
         for page in self:
@@ -176,29 +173,32 @@ class Document(object):
 
 class GameConfigLite(Document):
     """
-    Game configuration consisting of only one Google Sheet.
+    Игровой конфиг состоящий только из одной гуглотаблички.
     """
 
     def __init__(self, spreadsheet_id, client=None):
-        self.client = client or gspread.oauth()  # GoogleOauth object
-        self.spreadsheet_id = spreadsheet_id  # Google Sheet ID
-        self._spreadsheet = None
-        self.page_skip_letters = {'#', '.'}
-        self.key_skip_letters = {'#', '.'}
+        self.client = client or gspread.oauth() # Обьект авторизации в гугле GoogleOauth
+        self.spreadsheet_id = spreadsheet_id  # ID гуглотаблицы
+        self.cache = None
+        self.page_skip_letters = ['#', '.']
+        self.key_skip_letters = ['#', '.']
         self.parser_mode = 'v1'
 
-    @cached_property
+    @property
     def spreadsheet(self):
         """
-        Returns a gspread.Spreadsheet object
+        Возвращает обьект gspread.Spreadsheet
         """
 
-        return self.client.open_by_key(self.spreadsheet_id)
+        if not self.cache:
+            self.cache = self.client.open_by_key(self.spreadsheet_id)
+
+        return self.cache
 
     def save(self, path='', mode=''):
         """
-        If mode = 'full' is specified, it tries to save all pages of the document.
-        IMPORTANT! Working pages are usually not prepared for saving and will fail.
+        Если указано mode = 'full', то пытается сохранить все страницы документа.
+        ВАЖНО! Рабочие страницы обычно не подготовлены к сохранению и будут падать.
         """
 
         pages = self if mode == 'full' else self.pages()
