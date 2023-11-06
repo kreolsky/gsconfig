@@ -242,7 +242,7 @@ class GameConfig(object):
 
         elif settings:
             self._settings = {
-                key : GSpreadsheet(self.client, value)
+                key : self.client.open_by_key(value)
                 for key, value in settings.items()
             }
 
@@ -273,11 +273,11 @@ class GameConfig(object):
     @property
     def settings(self):
         if not self._settings:
-            settings_obj = GSpreadsheet(self.client, self._settings_gspread_id).pull()
+            settings_obj = self.client.open_by_key(self._settings_gspread_id).pull()
             settings = settings_obj[self._settingspage_name].get_as_json()
 
             self._settings = {
-                key : GSpreadsheet(self.client, value)
+                key : self.client.open_by_key(value)
                 for key, value in settings.items()
             }
 
