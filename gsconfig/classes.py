@@ -1,9 +1,18 @@
+import os
 import gspread
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 
 from . import tools
+
+
+parsers = {
+    'raw': tools.parser_dummy,
+    'csv': tools.parser_dummy,
+    'json': tools.parser_json
+}
 
 
 class GSConfigError(Exception):
@@ -14,11 +23,62 @@ class GSConfigError(Exception):
     def __str__(self):
         return f'{self.text} Err no. {self.value}'
 
-parsers = {
-    'raw': tools.parser_dummy,
-    'csv': tools.parser_dummy,
-    'json': tools.parser_json
-}
+
+class Template(object):
+    def __init__(self, path, pattern=None, format=None):
+        self.path = path
+        self.pattern = pattern or r'\{([a-z0-9_]+)\}'
+        self.cache = None
+        self._format = format or None
+
+    @property
+    def title(self) -> str:
+        return os.path.basename(self.path)
+
+    @property
+    def name(self) -> str:
+        return self._calculate_name_and_extension()['name']
+    
+    @property
+    def body(self) -> str:
+        """
+        Возвращает тело шаблона как строку.
+        """
+        
+        with open(self.path, 'r') as file:
+            return file.read()
+
+    @property
+    def keys(self) -> list:
+        """
+        Возвращает все ключи используемые в шаблоне.
+        """
+
+        return re.findall(self.pattern, self.body)
+
+    def set_format(self, format):
+        """
+        Принудительное изменение формата шаблона
+        """
+
+        self.format = format
+
+    def _calculate_name_and_extension(self) -> dict:
+        r = self.title.split('.')
+        return {'name': r[0], 'extension': r[-1]}
+    
+    def make(self, data) -> str:
+        """
+        Заполняет шаблон данными.
+        ВАЖНО! Для формата JSON необходимо заполнять все поля шаблона!
+        """
+
+        def replace_keys(match):
+            key = match.group(1)
+            return str(data.get(key, match.group()))
+
+        return re.sub(self.pattern, replace_keys, self.body)
+
 
 class Page(object):
     """
@@ -36,7 +96,7 @@ class Page(object):
     @property
     def title(self):
         """
-        Page title as is, the page name in the table
+        Page title as is, the page name in the table.
         """
         return self.worksheet.title
 
@@ -45,7 +105,7 @@ class Page(object):
         """
         Page name.
         The title suffix determining the data format is removed,
-        if a parser is specified for it
+        if a parser is specified for it.
         """
         if not self._name_and_format:
             self._calculate_name_and_format()
@@ -55,7 +115,7 @@ class Page(object):
     def format(self):
         """
         Determines the data format based on the page title.
-        If nothing is specified, it is determined as raw
+        If nothing is specified, it is determined as raw.
         """
         if not self._name_and_format:
             self._calculate_name_and_format()
@@ -124,7 +184,14 @@ class Document(object):
         return self._create_page(self.spreadsheet.worksheet(title))
 
     def __iter__(self):
+        """
+        This method returns only the main config pages.
+        Those that do NOT start with symbols in page_skip_letters.
+        """
+    
         for page in self.spreadsheet.worksheets():
+            if any([page.title.startswith(x) for x in self.page_skip_letters]):
+                continue            
             yield self._create_page(page)
 
     def _create_page(self, worksheet):
@@ -139,8 +206,18 @@ class Document(object):
         Returns the first main page among those
         that do NOT start with symbols in page_skip_letters.
         """
+
         for page in self.pages():
             return page
+
+    @property
+    def pages(self):
+        """
+        This method returns all config pages.
+        """
+
+        for page in self.spreadsheet.worksheets():
+            yield self._create_page(page)
 
     def set_page_skip_letters(self, page_skip_letters):
         """
@@ -162,17 +239,6 @@ class Document(object):
             raise TypeError('key_skip_letters must be a list or a set!')
         self.key_skip_letters = set(key_skip_letters)
 
-    def pages(self):
-        """
-        This method returns only the main config pages.
-        Those that do NOT start with symbols in page_skip_letters.
-        """
-
-        for page in self:
-            if any([page.title.startswith(x) for x in self.page_skip_letters]):
-                continue
-            yield page
-
 
 class GameConfigLite(Document):
     """
@@ -182,7 +248,6 @@ class GameConfigLite(Document):
     def __init__(self, spreadsheet_id, client=None):
         self.client = client or gspread.oauth()  # GoogleOauth object
         self.spreadsheet_id = spreadsheet_id  # Google Sheet ID
-        self._spreadsheet = None
         self.page_skip_letters = {'#', '.'}
         self.key_skip_letters = {'#', '.'}
         self.parser_mode = 'v1'
@@ -212,7 +277,7 @@ class GameConfig(object):
     Принимает настройки как из гуглотаблицы так и в виде словаря. Если указано и то и то,
     то будет использован словарь.
 
-    settings -- словарь с настройками.
+    settings -- словарь настроек.
     Либо id документа и название вкладки со списком всех документов конфига
         spreadsheet_id -- id таблицы со списко конфигов
         page_title -- заголовок страницы в таблице со списком документов конфига
@@ -221,7 +286,7 @@ class GameConfig(object):
         document_title -- название
         spreadsheet_id -- id документа
 
-    backup -- словарь с со списком документов конфига и настройками конфига.
+    backup -- словарь со списком документов конфига и настройками конфига.
     Необходимо для восстановления обьекта конфига ииз бекапа.
     """
 
@@ -238,7 +303,7 @@ class GameConfig(object):
 
         elif 'spreadsheet_id' in settings:
             self._settings_gspread_id = settings['spreadsheet_id']
-            self._settingspage_name = settings['page_title']
+            self._settings_page_title = settings['page_title']
 
         elif settings:
             self._settings = {
@@ -274,7 +339,7 @@ class GameConfig(object):
     def settings(self):
         if not self._settings:
             settings_obj = self.client.open_by_key(self._settings_gspread_id).pull()
-            settings = settings_obj[self._settingspage_name].get_as_json()
+            settings = settings_obj[self._settings_page_title].get_as_json()
 
             self._settings = {
                 key : self.client.open_by_key(value)

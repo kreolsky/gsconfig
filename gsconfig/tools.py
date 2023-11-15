@@ -3,7 +3,7 @@ import csv
 import os
 import gsparser
 
-from . import classes as classes
+from . import classes
 
 def parser_dummy(page_data, **params):
     return page_data
@@ -82,12 +82,15 @@ def save_csv(data, title, path):
             writer = csv.writer(file, quoting=csv.QUOTE_ALL)
             writer.writerow(line)
 
-def save_json(data, title, path):
+def save_json(data, title, path=''):
     if not title.endswith('.json'):
         title = f'{title}.json'
+    
+    if not isinstance(type(data), dict):
+        data = json.loads(data)
 
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
-        json.dump(data, file, indent = 2, ensure_ascii = False)
+        json.dump(data, file, indent=2, ensure_ascii=False)
 
 save_page_functions = {
     'json': save_json,

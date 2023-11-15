@@ -1,4 +1,5 @@
 from .classes import GameConfig
+from .classes import Template
 from .classes import GameConfigLite
 
 from . import classes
