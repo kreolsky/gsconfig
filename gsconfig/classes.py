@@ -25,11 +25,17 @@ class GSConfigError(Exception):
 
 
 class Template(object):
-    def __init__(self, path, pattern=None, format=None):
+    """
+    Класс шаблона из которого будет генериться конфиг.
+    Ключи в тексте выделяются '{}' (фигурные скобки), внутри допустимы [a-z0-9_!]+
+    Паттерн ключа можно переопределить, главно не сломать json формат.
+
+    ВАЖНО! Паттерн содержит '!' для разделения ключа и команды
+    """
+    def __init__(self, path, pattern=None):
         self.path = path
-        self.pattern = pattern or r'\{([a-z0-9_]+)\}'
+        self.pattern = pattern or r'\{([a-z0-9_!]+)\}'
         self.cache = None
-        self._format = format or None
 
     @property
     def title(self) -> str:
@@ -56,13 +62,6 @@ class Template(object):
 
         return re.findall(self.pattern, self.body)
 
-    def set_format(self, format):
-        """
-        Принудительное изменение формата шаблона
-        """
-
-        self.format = format
-
     def _calculate_name_and_extension(self) -> dict:
         r = self.title.split('.')
         return {'name': r[0], 'extension': r[-1]}
@@ -70,12 +69,21 @@ class Template(object):
     def make(self, data) -> str:
         """
         Заполняет шаблон данными.
-        ВАЖНО! Для формата JSON необходимо заполнять все поля шаблона!
+        ВАЖНО! Для сохранения в JSON необходимо заполнять все поля шаблона!
         """
 
         def replace_keys(match):
-            key = match.group(1)
-            return str(data.get(key, match.group()))
+            group = match.group(1).split('!')
+            # Ключ, то что будет искаться для замены
+            key = group[0]
+
+            # Команда всегда после '!' нужен дополнительный обрабочик
+            # TODO: Прикрутить обработчик команд (взять решение из gsparser)
+            command = group[-1]
+
+            # Если ключ не найден, падать с ошибкой!
+            # TODO: Вставить обработчик варнингов
+            return str(data[key])  # str(data.get(key, f'"{{{key}}}"'))
 
         return re.sub(self.pattern, replace_keys, self.body)
 

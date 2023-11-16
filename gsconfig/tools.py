@@ -73,7 +73,7 @@ def save_page(page, path=''):
     save_func = save_page_functions.get(page.format, save_csv)
     return save_func(page.get(), page.name, path)
 
-def save_csv(data, title, path):
+def save_csv(data, title, path=''):
     if not title.endswith('.csv'):
         title = f'{title}.csv'
 
@@ -91,6 +91,10 @@ def save_json(data, title, path=''):
 
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         json.dump(data, file, indent=2, ensure_ascii=False)
+
+def save_raw(data, title, path=''):
+    with open(os.path.join(path, title), 'w') as file:
+        file.write(data)
 
 save_page_functions = {
     'json': save_json,
