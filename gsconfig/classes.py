@@ -14,6 +14,18 @@ parsers = {
     'json': tools.parser_json
 }
 
+"""
+Дополнительные команды при сборке конфига из шаблона
+По умолчанию, имя команды указывается после '!'. 
+Например: {cargo!float}. Где, 
+'cargo' -- ключ для замены
+'float' -- указывает что оно всегда должно быть типа float
+"""
+parser_command = {
+    'float': lambda x: float(x),
+    'inf': lambda x: int(x)
+}
+
 
 class GSConfigError(Exception):
     def __init__(self, text='', value=-1):
@@ -27,14 +39,16 @@ class GSConfigError(Exception):
 class Template(object):
     """
     Класс шаблона из которого будет генериться конфиг.
-    Ключи в тексте выделяются '{}' (фигурные скобки), внутри допустимы [a-z0-9_!]+
-    Паттерн ключа можно переопределить, главно не сломать json формат.
+    Ключи в тексте выделяются '{}' (фигурные скобки), внутри допустимы [a-z0-9_!]+ 
+    Отсутствие пробелов между ключем и скобками важно для корректного разбора JSON
+    Паттерн ключа и символ отделяющий команду можно переопределить.
 
-    ВАЖНО! Паттерн содержит '!' для разделения ключа и команды
+    ВАЖНО! command_letter всегда должен быть включен в pattern
     """
-    def __init__(self, path, pattern=None):
+    def __init__(self, path, pattern=None, command_letter=None):
         self.path = path
         self.pattern = pattern or r'\{([a-z0-9_!]+)\}'
+        self.command_letter = command_letter or '!'
         self.cache = None
 
     @property
@@ -73,17 +87,17 @@ class Template(object):
         """
 
         def replace_keys(match):
-            group = match.group(1).split('!')
-            # Ключ, то что будет искаться для замены
-            key = group[0]
+            key_command_pair = match.group(1).split(self.command_letter)
 
-            # Команда всегда после '!' нужен дополнительный обрабочик
-            # TODO: Прикрутить обработчик команд (взять решение из gsparser)
-            command = group[-1]
+            key = key_command_pair[0]  # Ключ, то что будет искаться для замены 
+            insert_item = data[key]  # TODO где-то тут вставить обработчик ошибок наличия ключа
 
-            # Если ключ не найден, падать с ошибкой!
-            # TODO: Вставить обработчик варнингов
-            return str(data[key])  # str(data.get(key, f'"{{{key}}}"'))
+            # Команда ВСЕГДА идет после command_letter!
+            if self.command_letter in match.group(1):
+                command = key_command_pair[-1]
+                insert_item = parser_command[command](insert_item)
+
+            return str(insert_item)  # str(data.get(key, f'"{{{key}}}"'))
 
         return re.sub(self.pattern, replace_keys, self.body)
 
