@@ -141,6 +141,7 @@ class Page(object):
         """
         Page title as is, the page name in the table.
         """
+
         return self.worksheet.title
 
     @property
@@ -150,6 +151,7 @@ class Page(object):
         The title suffix determining the data format is removed,
         if a parser is specified for it.
         """
+
         if not self._name_and_format:
             self._calculate_name_and_format()
         return self._name_and_format["name"]
@@ -160,6 +162,7 @@ class Page(object):
         Determines the data format based on the page title.
         If nothing is specified, it is determined as raw.
         """
+
         if not self._name_and_format:
             self._calculate_name_and_format()
         return self._name_and_format["format"]
@@ -176,12 +179,16 @@ class Page(object):
 
     def __repr__(self):
         return json.dumps(self.get(), ensure_ascii=False)
+    
+    def __iter__(self):
+        yield from self.get()
 
     def set_key_skip_letters(self, key_skip_letters):
         """
         Comment symbol for keys on config pages.
         Keys starting with these symbols are not exported.
         """
+
         if not isinstance(key_skip_letters, (list, set)):
             raise TypeError('key_skip_letters must be a list or a set!')
         self.key_skip_letters = set(key_skip_letters)
@@ -190,11 +197,13 @@ class Page(object):
         """
         Retrieves data from the page in a format appropriate for its type.
         If the format is not specified separately and not set by the user, it tries to get it as raw
-        format - data storage format
+        
+        format -- data storage format
             json - collects into a dictionary and parses values
             csv - returns data as a two-dimensional array. Always WITHOUT parsing!
             raw - returns data as a two-dimensional array. Always WITHOUT parsing!
-        mode - whether to parse data or not
+        
+        mode -- whether to parse data or not
             raw - data will always be returned WITHOUT parsing
         """
 
