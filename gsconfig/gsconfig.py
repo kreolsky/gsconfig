@@ -33,7 +33,7 @@ class Template(object):
 
     ВАЖНО! 
     1. command_letter всегда должен быть включен в pattern
-    2. ключ + команда всегда должены быть в первой группе
+    2. ключ + команда всегда должены быть в первой группе регулярного выражения
     """
     def __init__(self, path=None, body='', pattern=None, command_letter=None):
         self.path = path
@@ -127,7 +127,7 @@ class Page(object):
     def __init__(self, worksheet):
         self.worksheet = worksheet  # Source gspread.Worksheet object
         self.key_skip_letters = set()
-        self.parser_mode = None
+        self.parser_version = None
         self._cache = None
         self._name_and_format = None
         self.parsers = {
@@ -212,7 +212,7 @@ class Page(object):
 
         params['is_raw'] = mode == 'raw'
         params['key_skip_letters'] = self.key_skip_letters
-        params['mode'] = self.parser_mode
+        params['version'] = self.parser_version
         format = format or self.format
 
         return self.parsers[format](self._cache, **params)
@@ -227,7 +227,7 @@ class Document(object):
         self.spreadsheet = spreadsheet  # Source gspread.Spreadsheet object
         self.page_skip_letters = set()
         self.key_skip_letters = set()
-        self.parser_mode = None
+        self.parser_version = None
 
     def __repr__(self):
         return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet.id}>"
@@ -249,7 +249,7 @@ class Document(object):
     def _create_page(self, worksheet):
         page = Page(worksheet)
         page.set_key_skip_letters(self.key_skip_letters)
-        page.parser_mode = self.parser_mode
+        page.parser_version = self.parser_version
         return page
 
     @property
@@ -302,7 +302,7 @@ class GameConfigLite(Document):
         self.spreadsheet_id = spreadsheet_id  # Google Sheet ID
         self.page_skip_letters = {'#', '.'}
         self.key_skip_letters = {'#', '.'}
-        self.parser_mode = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
+        self.parser_version = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
 
     @cached_property
     def spreadsheet(self):
