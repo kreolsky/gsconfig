@@ -8,25 +8,6 @@ from functools import cached_property
 from . import tools
 
 
-parsers = {
-    'raw': tools.parser_dummy,
-    'csv': tools.parser_dummy,
-    'json': tools.parser_json
-}
-
-"""
-Дополнительные команды при сборке конфига из шаблона
-По умолчанию, имя команды указывается после '!'. 
-Например: {cargo!float}. Где, 
-'cargo' -- ключ для замены
-'float' -- указывает что оно всегда должно быть типа float
-"""
-parser_command = {
-    'float': lambda x: float(x),
-    'inf': lambda x: int(x)
-}
-
-
 class GSConfigError(Exception):
     def __init__(self, text='', value=-1):
         self.text = text
@@ -39,17 +20,33 @@ class GSConfigError(Exception):
 class Template(object):
     """
     Класс шаблона из которого будет генериться конфиг.
-    Ключи в тексте выделяются '{}' (фигурные скобки), внутри допустимы [a-z0-9_!]+ 
-    Отсутствие пробелов между ключем и скобками важно для корректного разбора JSON
     Паттерн ключа и символ отделяющий команду можно переопределить.
 
-    ВАЖНО! command_letter всегда должен быть включен в pattern
+    path -- путь для файла шаблона    
+    body -- можно задать шаблон как строку
+    pattern -- паттерн определения ключа в шаблоне r'\{([a-z0-9_!]+)\}' - по умолчанию
+    command_letter -- символ отделяющий команду от ключа. '!' - по умолчанию
+
+    Пример ключа в шаблоне: {cargo_9!float}. Где, 
+    'cargo_9' -- ключ для замены (допустимые символы a-z0-9_)
+    'float' -- указывает что оно всегда должно быть типа float
+
+    ВАЖНО! 
+    1. command_letter всегда должен быть включен в pattern
+    2. ключ + команда всегда должены быть в первой группе
     """
-    def __init__(self, path, pattern=None, command_letter=None):
+    def __init__(self, path=None, body='', pattern=None, command_letter=None):
         self.path = path
         self.pattern = pattern or r'\{([a-z0-9_!]+)\}'
         self.command_letter = command_letter or '!'
-        self.cache = None
+        self.command_handlers = {
+            'dummy': lambda x: x,
+            'float': lambda x: float(x),
+            'int': lambda x: int(x),
+            'str': lambda x: str(x)
+        }
+        self._body = body
+        self._keys = []
 
     @property
     def title(self) -> str:
@@ -64,9 +61,20 @@ class Template(object):
         """
         Возвращает тело шаблона как строку.
         """
+
+        if self._body:
+            return self._body
+
+        if not self.path:
+            raise ValueError("Specify the path to the template file.")
+
+        try:
+            with open(self.path, 'r') as file:
+                self._body = file.read()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Template file '{self.path}' not found.")
         
-        with open(self.path, 'r') as file:
-            return file.read()
+        return self._body
 
     @property
     def keys(self) -> list:
@@ -74,7 +82,9 @@ class Template(object):
         Возвращает все ключи используемые в шаблоне.
         """
 
-        return re.findall(self.pattern, self.body)
+        if not self._keys:
+            self._keys = re.findall(self.pattern, self.body)
+        return self._keys
 
     def _calculate_name_and_extension(self) -> dict:
         r = self.title.split('.')
@@ -89,15 +99,22 @@ class Template(object):
         def replace_keys(match):
             key_command_pair = match.group(1).split(self.command_letter)
 
-            key = key_command_pair[0]  # Ключ, то что будет искаться для замены 
-            insert_item = data[key]  # TODO где-то тут вставить обработчик ошибок наличия ключа
+            # Ключ, который будет искаться для замены 
+            key = key_command_pair[0]
+            # Обработка ошибки отсутствия ключа
+            if key not in data:
+                raise KeyError(f"Key '{key}' not found in template data.")
+            insert_data = data[key]
 
             # Команда ВСЕГДА идет после command_letter!
             if self.command_letter in match.group(1):
                 command = key_command_pair[-1]
-                insert_item = parser_command[command](insert_item)
+                # Обработка ошибки отсутствия команды
+                if command not in self.command_handlers:
+                    raise ValueError(f"Command '{command}' is not supported by Template class")
+                insert_data = self.command_handlers[command](insert_data)
 
-            return str(insert_item)  # str(data.get(key, f'"{{{key}}}"'))
+            return str(insert_data)  # str(data.get(key, f'"{{{key}}}"'))
 
         return re.sub(self.pattern, replace_keys, self.body)
 
@@ -107,13 +124,17 @@ class Page(object):
     Wrapper class for gspread.Worksheet
     """
 
-    def __init__(self, worksheet, parsers=parsers):
+    def __init__(self, worksheet):
         self.worksheet = worksheet  # Source gspread.Worksheet object
-        self.parsers = parsers or {}
         self.key_skip_letters = set()
-        self.cache = None
         self.parser_mode = None
+        self._cache = None
         self._name_and_format = None
+        self.parsers = {
+            'raw': tools.parser_dummy,
+            'csv': tools.parser_dummy,
+            'json': tools.parser_json
+        }
 
     @property
     def title(self):
@@ -177,15 +198,15 @@ class Page(object):
             raw - data will always be returned WITHOUT parsing
         """
 
-        if not self.cache:
-            self.cache = self.worksheet.get_all_values()
+        if not self._cache:
+            self._cache = self.worksheet.get_all_values()
 
         params['is_raw'] = mode == 'raw'
         params['key_skip_letters'] = self.key_skip_letters
         params['mode'] = self.parser_mode
         format = format or self.format
 
-        return self.parsers[format](self.cache, **params)
+        return self.parsers[format](self._cache, **params)
 
 
 class Document(object):
@@ -272,7 +293,7 @@ class GameConfigLite(Document):
         self.spreadsheet_id = spreadsheet_id  # Google Sheet ID
         self.page_skip_letters = {'#', '.'}
         self.key_skip_letters = {'#', '.'}
-        self.parser_mode = 'v1'
+        self.parser_mode = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
 
     @cached_property
     def spreadsheet(self):
