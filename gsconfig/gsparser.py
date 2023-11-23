@@ -1,21 +1,14 @@
 from . import tools
 
 
-class CommandParser:
-    def __init__(self):
-        self.key_commands = {
-            'dummy': lambda x: x,
-            'list': lambda x: [x] if type(x) not in (list, tuple,) else x,
-            'flist': lambda x: [x],
-        }
-
-    def parse_command(self, command, result):
-        return self.key_commands[command](result)
-
 class BlockParser:
     def __init__(self, params):
-        self.command_parser = CommandParser()
         self.params = params
+        self.command_handlers = {
+            'dummy': lambda x: x,
+            'list': lambda x: [x] if type(x) not in (list, tuple,) else x,
+            'flist': lambda x: [x]
+        }
 
     def parse_raw(self, line):
         return line[1:-1]
@@ -24,20 +17,35 @@ class BlockParser:
         return converter.jsonify(line[1:-1], _unwrap_it=True)
 
     def parse_dict(self, line, out_dict, converter):
+        """
+        line - фрагмент строки для разбора
+        out_dict - итоговый словарь
+        converter - обьект ConfigJSONConverter
+        """
+
+        # Всегда разворачиваем для версии v2
+        # Потом проверяем какие команды необходимо применить
         unwrap_it = self.params.get('version') == 'v2'
+        # Пустышка по умолчанию, не делать ничего
         command = 'dummy'
 
         key, substring = tools.split_string_by_sep(line, self.params['sep_dict'], **self.params)
         result = converter.jsonify(substring, _unwrap_it=unwrap_it)
 
+        # Команда всегда указана через 'sep_func'
         if unwrap_it and self.params['sep_func'] in key:
             key, command = key.split(self.params['sep_func'])
-        out_dict[key] = self.command_parser.parse_command(command, result)
+        out_dict[key] = self.command_handlers[command](result)
 
     def parse_string(self, line):
         return tools.parse_string(line, self.params['to_num'])
 
     def parse_block(self, string, converter):
+        """
+        string - строки для разбора
+        converter - обьект ConfigJSONConverter
+        """
+
         out = []
         out_dict = {}
 
@@ -221,7 +229,7 @@ class ConfigJSONConverter:
 
     Например: key!list означает, что содержимое ключа key обязательно будет списком.
 
-    См. все актуальные доступные команды в функции parse_command()
+    См. все актуальные доступные команды классе CommandHandler()
 
     ### to_num
     Нужно ли пытаться преобразовывать значения в числа.
@@ -262,19 +270,20 @@ class ConfigJSONConverter:
         self.params = {**self.default_params, **(params or {})}
         self.parser = BlockParser(self.params)
 
-    def jsonify(self, string: str, is_raw: bool = False, _unwrap_it = None) -> dict:
+    def jsonify(self, string: str, is_raw: bool = None, _unwrap_it: bool = None) -> dict:
+        # Когда is_raw не задано, берем значение из настроект обьекта
+        if is_raw is None:
+            is_raw = self.params['is_raw']
+
         # Для сырых строк возвращаем без изменений
         # Необходимо когда мешанина из разных типов строк
         # Пожалуй, это плохое решение
-        is_raw = is_raw or self.params['is_raw']
         if is_raw:
             return string
 
         string = str(string)
 
         # Да, всегда True. Была идея что для разных версий могут быть разные условия
-        # Но, кажется, это не актуально и (можно|нужно) выпилить и 
-        # использовать True по умолчанию
         if _unwrap_it is None:
             _unwrap_it = {'v1': True, 'v2': True}[self.params['version']]
 
@@ -283,12 +292,12 @@ class ConfigJSONConverter:
             out.append(self.parser.parse_block(line, self))
 
         """
-        Проверяем что нужно разворачивать, а что нет в зависимости от того, какие
+        Проверяем что нужно разворачивать в зависимости от того, какие
         элементы структуры разбираем. Значения внутри словарей зависит от режима и версии
 
         v1. Всё, кроме словарей, разворачиваем по умолчанию
         v2. Всегда разворачиваем. Дополнительные действия зависят от команды в ключе
-        См. parse_block() для деталей
+        См. parser.parse_block() для деталей
         """
         unwrap_v1 = self.params['version'] == 'v1' and (type(out[0]) not in (dict, ) or _unwrap_it)
         unwrap_v2 = self.params['version'] == 'v2' and _unwrap_it
