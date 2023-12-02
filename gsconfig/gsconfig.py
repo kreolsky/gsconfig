@@ -24,7 +24,7 @@ class Template(object):
 
     path -- путь для файла шаблона    
     body -- можно задать шаблон как строку
-    pattern -- паттерн определения ключа в шаблоне r'\{([a-z0-9_!]+)\}' - по умолчанию
+    pattern -- паттерн определения ключа в шаблоне. r'\{([a-z0-9_!]+)\}' - по умолчанию
     command_letter -- символ отделяющий команду от ключа. '!' - по умолчанию
 
     Пример ключа в шаблоне: {cargo_9!float}. Где, 
@@ -35,7 +35,7 @@ class Template(object):
     1. command_letter всегда должен быть включен в pattern
     2. ключ + команда всегда должены быть в первой группе регулярного выражения
     """
-    def __init__(self, path=None, body='', pattern=None, command_letter=None):
+    def __init__(self, path='', body='', pattern=None, command_letter=None):
         self.path = path
         self.pattern = pattern or r'\{([a-z0-9_!]+)\}'
         self.command_letter = command_letter or '!'
@@ -90,6 +90,23 @@ class Template(object):
         r = self.title.split('.')
         return {'name': r[0], 'extension': r[-1]}
     
+    def set_path(self, path=''):
+        if not path:
+            raise ValueError("Specify the path for template definition.")
+        
+        try:
+            with open(path, 'r') as file:
+                self._body = file.read()
+            self.path = path
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Template file '{path}' not found.")
+
+    def set_body(self, body=''):
+        if not body:
+            raise ValueError("Specify the body for template definition.")
+        
+        self._body = body
+
     def make(self, data) -> str:
         """
         Заполняет шаблон данными.
@@ -101,6 +118,7 @@ class Template(object):
 
             # Ключ, который будет искаться для замены 
             key = key_command_pair[0]
+
             # Обработка ошибки отсутствия ключа
             if key not in data:
                 raise KeyError(f"Key '{key}' not found in template data.")
@@ -109,12 +127,13 @@ class Template(object):
             # Команда ВСЕГДА идет после command_letter!
             if self.command_letter in match.group(1):
                 command = key_command_pair[-1]
+
                 # Обработка ошибки отсутствия команды
                 if command not in self.command_handlers:
                     raise ValueError(f"Command '{command}' is not supported by Template class")
                 insert_data = self.command_handlers[command](insert_data)
 
-            return str(insert_data)  # str(data.get(key, f'"{{{key}}}"'))
+            return str(insert_data)
 
         return re.sub(self.pattern, replace_keys, self.body)
 
