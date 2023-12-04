@@ -25,7 +25,7 @@ class BlockParser:
 
         # Всегда разворачиваем для версии v2
         # Потом проверяем какие команды необходимо применить
-        unwrap_it = self.params.get('version') == 'v2'
+        unwrap_it = self.params.get('parser_version') == 'v2'
         # Пустышка по умолчанию, не делать ничего
         command = 'dummy'
 
@@ -90,7 +90,7 @@ class ConfigJSONConverter:
         'raw_pattern': '"',
         'to_num': True,
         'always_unwrap': False,
-        'version': 'v1',
+        'parser_version': 'v1',
         'is_raw': False
     }
     Создание класса ```parser = ConfigJSONConverter(params)```
@@ -103,7 +103,7 @@ class ConfigJSONConverter:
 
     ## Параметры:
 
-    ### version = 'v1'. По умолчанию.
+    ### parser_version = 'v1'. По умолчанию.
     Все словари всегда будут завернуты в список!
 
     Строка: ```'one = two, item = {count = 4.5, price = 100, name = {name1 = name}}'```
@@ -125,7 +125,7 @@ class ConfigJSONConverter:
         ]
     }
     ```
-    ### version = 'v2'
+    ### parser_version = 'v2'
     Разворачивает все списки единичной длины. Для заворачивания необходимо указать в ключе команду 'list'.
 
     Сама команда (все что после указателя команды) в итоговом JSON будет отрезано. См. символ sep_func
@@ -229,7 +229,7 @@ class ConfigJSONConverter:
 
     Например: key!list означает, что содержимое ключа key обязательно будет списком.
 
-    См. все актуальные доступные команды классе CommandHandler()
+    См. все актуальные доступные команды перечислены в command_handlers класса BlockParser
 
     ### to_num
     Нужно ли пытаться преобразовывать значения в числа.
@@ -264,7 +264,7 @@ class ConfigJSONConverter:
             'raw_pattern': '"',
             'to_num': True,
             'always_unwrap': False,
-            'version': 'v1',
+            'parser_version': 'v1',
             'is_raw': False
         }
         self.params = {**self.default_params, **(params or {})}
@@ -285,7 +285,7 @@ class ConfigJSONConverter:
 
         # Да, всегда True. Была идея что для разных версий могут быть разные условия
         if _unwrap_it is None:
-            _unwrap_it = {'v1': True, 'v2': True}[self.params['version']]
+            _unwrap_it = {'v1': True, 'v2': True}[self.params['parser_version']]
 
         out = []
         for line in tools.split_string_by_sep(string, self.params['sep_block'], **self.params):
@@ -299,8 +299,8 @@ class ConfigJSONConverter:
         v2. Всегда разворачиваем. Дополнительные действия зависят от команды в ключе
         См. parser.parse_block() для деталей
         """
-        unwrap_v1 = self.params['version'] == 'v1' and (type(out[0]) not in (dict, ) or _unwrap_it)
-        unwrap_v2 = self.params['version'] == 'v2' and _unwrap_it
+        unwrap_v1 = self.params['parser_version'] == 'v1' and (type(out[0]) not in (dict, ) or _unwrap_it)
+        unwrap_v2 = self.params['parser_version'] == 'v2' and _unwrap_it
         if len(out) == 1 and (self.params['always_unwrap'] or unwrap_v1 or unwrap_v2):
             return out[0]
 

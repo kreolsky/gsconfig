@@ -231,7 +231,7 @@ class Page(object):
 
         params['is_raw'] = mode == 'raw'
         params['key_skip_letters'] = self.key_skip_letters
-        params['version'] = self.parser_version
+        params['parser_version'] = self.parser_version
         format = format or self.format
 
         return self.parsers[format](self._cache, **params)

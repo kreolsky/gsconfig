@@ -21,6 +21,7 @@ def parser_json(page_data, **params):
 
     key - заголовок столбца ключей для формата в 2 колонки
     value - заголовок столбца данных
+
     **params - все параметры доступные для парсера parser.jsonify
     """
 
@@ -28,14 +29,14 @@ def parser_json(page_data, **params):
     value = params.get('value', 'value')
     key_skip_letters = params.get('key_skip_letters', [])
 
-    headers = page_data[0]
-    data = page_data[1:]
+    headers = page_data[0]  # Заголовки
+    data = page_data[1:]  # Данные
 
     # Парсер конфигов из гуглодоки в JSON
     parser = gsparser.ConfigJSONConverter(params)
 
-    # Если документ из двух колонок.
-    # Ключами в столбце key и значением в столбце value
+    # Документ из двух колонок
+    # Ключи в столбце key и значения в столбце value
     if key in headers and value in headers:
         key_index = headers.index(key)
         value_index = headers.index(value)
@@ -47,6 +48,7 @@ def parser_json(page_data, **params):
 
         return out
 
+    # Обычный документ, данные расположены строками
     # Первая строка с заголовками, остальные строки с данными
     out = []
     for values in data:
@@ -57,7 +59,7 @@ def parser_json(page_data, **params):
         bufer = parser.jsonify(', '.join(bufer))
         out.append(bufer)
 
-    # Оставлено как совместимость с первой версией
+    # Оставлено для совместимость с первой версией
     # Если в результате только один словарь, он не заворачивается
     if len(out) == 1:
         return out[0]
