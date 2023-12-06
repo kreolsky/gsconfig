@@ -12,7 +12,7 @@ Game Config Tools over gspread (Google Spreadsheets library).
 
 Template -- класс шаблона из которого собирается конфиг
 GameConfigLite -- класс конфига состоящего из одной гуглодоки
-ConfigJSONConverter -- класс конфертора из промежуточного формата гуглодоки в JSON
+ConfigJSONConverter -- класс конвертора из промежуточного формата гуглодоки в JSON
 
 """
 
