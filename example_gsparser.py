@@ -1,5 +1,5 @@
 import json
-from gsconfig import ConfigJSONConverter
+import gsconfig
 import os
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -67,7 +67,7 @@ params = {
     'version': 'v2',
     # 'is_raw': False
     }
-converter = ConfigJSONConverter()
+converter = gsconfig.ConfigJSONConverter()
 
 for string in strings_in:
     result = converter.jsonify(string)

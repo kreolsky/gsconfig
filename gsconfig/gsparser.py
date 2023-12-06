@@ -1,4 +1,91 @@
-from . import tools
+import ast
+
+def define_split_points(string, sep, **params):
+    """
+    Define the positions of all separator characters in the string.
+    Ignores separators inside blocks enclosed by brackets.
+
+    Args:
+        string (str): The original string to be parsed.
+        sep (str): The separator. Example: sep = '|'
+        params (dict): Additional parameters, including:
+            - br_block (str): Brackets for highlighting sub-blocks. Example: br_block = '{}'
+            - br_list (str): Brackets for highlighting lists. Example: br_list = '[]'
+            - raw_pattern (str): Raw pattern to avoid parsing. Example: raw_pattern = '!'
+
+    Yields:
+        int: Indices of separator characters.
+    """
+
+    br_block = params.get('br_block')
+    br_list = params.get('br_list')
+    raw_pattern = params.get('raw_pattern')
+
+    # Brackets are grouped by types.
+    # All opening brackets increase the counter, closing brackets decrease it
+    br = {
+        br_block[0]: 1,
+        br_block[1]: -1,
+        br_list[0]: 1,
+        br_list[1]: -1
+    }
+
+    is_not_raw_block = True
+    count = 0
+
+    for i, letter in enumerate(string):
+        if letter == raw_pattern:
+            is_not_raw_block = not is_not_raw_block
+
+        elif (delta := br.get(letter)) is not None:
+            count += delta
+
+        elif letter == sep and count == 0 and is_not_raw_block:
+            yield i
+
+    yield len(string)
+
+def split_string_by_sep(string, sep, **params):
+    """
+    Разделение строки на массив подстрок по символу разделителю.
+    Не разделяет блоки выделенные скобками.
+
+    string - исходная строка для разбора
+    sep - разделитель. Пример: sep = '|'
+    br - тип скобок выделяющих подблоки. Пример: br = '{}'
+
+    Генератор. Возвращает подстроки.
+    """
+
+    prev = 0
+    for i in define_split_points(string, sep, **params):
+        yield string[prev:i].strip(sep).strip()
+        prev = i
+
+def parse_string(s, to_num=True):
+    """
+    Пытается перевести строку в число, предварительно определив что это было, int или float
+    Переводит true\false в "правильный" формат для JSON
+    """
+
+    string_mapping = {
+        'none': None,
+        'nan': None,
+        'null': None,
+        'true': True,
+        'false': False
+    }
+
+    if s.lower() in string_mapping:
+        return string_mapping[s.lower()]
+
+    if not to_num:
+        return s
+
+    try:
+        return ast.literal_eval(s)
+    except (ValueError, SyntaxError):
+        return s
 
 
 class BlockParser:
@@ -29,7 +116,7 @@ class BlockParser:
         # Пустышка по умолчанию, не делать ничего
         command = 'dummy'
 
-        key, substring = tools.split_string_by_sep(line, self.params['sep_dict'], **self.params)
+        key, substring = split_string_by_sep(line, self.params['sep_dict'], **self.params)
         result = converter.jsonify(substring, _unwrap_it=unwrap_it)
 
         # Команда всегда указана через 'sep_func'
@@ -38,7 +125,7 @@ class BlockParser:
         out_dict[key] = self.command_handlers[command](result)
 
     def parse_string(self, line):
-        return tools.parse_string(line, self.params['to_num'])
+        return parse_string(line, self.params['to_num'])
 
     def parse_block(self, string, converter):
         """
@@ -55,7 +142,7 @@ class BlockParser:
             lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, out_dict, converter),
         }
 
-        for line in tools.split_string_by_sep(string, self.params['sep_base'], **self.params):
+        for line in split_string_by_sep(string, self.params['sep_base'], **self.params):
             for condition, action in condition_mapping.items():
                 if condition(line):
                     result = action(line)
@@ -288,7 +375,7 @@ class ConfigJSONConverter:
             _unwrap_it = {'v1': True, 'v2': True}[self.params['parser_version']]
 
         out = []
-        for line in tools.split_string_by_sep(string, self.params['sep_block'], **self.params):
+        for line in split_string_by_sep(string, self.params['sep_block'], **self.params):
             out.append(self.parser.parse_block(line, self))
 
         """

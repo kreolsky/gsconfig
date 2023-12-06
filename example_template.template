@@ -1,0 +1,10 @@
+{
+    "string": "{variable}",
+    "string_with_command": {variable!string},
+    "string_as_substring": "Звучит как {substring}. Нравится?",
+    "int_as_substring": "Звучит как {cow!string}! Нравится?",
+    "digit_int": {cow!int},
+    "digit_source": {cow},
+    "dict": {dict},
+    "empty": "{empty}"
+}

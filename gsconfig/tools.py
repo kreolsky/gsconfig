@@ -12,21 +12,27 @@ def parser_dummy(page_data, **params):
 def parser_json(page_data, **params):
     """
     Парсит данные из гуглодоки в формат JSON. См. parser.jsonify
-    Понимает два формата:
-        1. Документ в две колонки key \ value
-        2. Свободный формат. Первая строка ключи, все остальные строки - значения
+    
+    Понимает несколько схем компановки данных. Проверка по очереди:
+    1. Указана схема данных (заголовки столбца ключей и данных). См. описание scheme ниже
+    2. ДВЕ колонки. В первой строке есть ОБА ключа 'key' и 'value'
+    3. Свободный формат, первая строка - ключи, все последуюшие - данные
 
-    Проверка форматов по очереди, если в первой строке нет ОБОИХ ключей key \ value,
-    то считает сободным форматом.
-
-    key - заголовок столбца ключей для формата в 2 колонки
-    value - заголовок столбца данных
+    Схема в две колонки упрощенная версия формата со схемой. Результатом будет словарь 
+    с парами ключ = значение. В случае указания схемы, данные будут дополнительно 
+    завернуты в словари с названием столбца данных.
+    
+    Параметры только для формата в ДВЕ колонки. 
+    Можно задать кастомные значения названия полей ключей и данных
+        key - заголовок столбца ключей
+        value - заголовок столбца данных
 
     **params - все параметры доступные для парсера parser.jsonify
     """
 
     key = params.get('key', 'key')
     value = params.get('value', 'value')
+    scheme = params.get('scheme')
     key_skip_letters = params.get('key_skip_letters', [])
 
     headers = page_data[0]  # Заголовки
@@ -35,16 +41,47 @@ def parser_json(page_data, **params):
     # Парсер конфигов из гуглодоки в JSON
     parser = gsparser.ConfigJSONConverter(params)
 
+    # Документ из произвольного числа колонок
+    # Указана схема (scheme) хранения данных
+    if scheme:
+        key = scheme.get('key', 'key')
+        key_index = headers.index(key)
+        value_indexes = [headers.index(x) for x in scheme['data']]
+        # Первый столбец проходит как дефолтный, 
+        # из него брать данные если в других столбцах пусто
+        default_value_index = value_indexes[0]
+
+        out = {}
+        for value_index in value_indexes:
+            bufer = {}
+            for line in data:
+                # Пропуск пустых строк
+                if not line[key_index]:
+                    continue
+
+                line_data = line[value_index]
+                # Если данные пустые, то брать из дефолтного столбца
+                if not line_data:
+                    line_data = line[default_value_index]
+                
+                bufer[line[key_index]] = parser.jsonify(line_data)
+            out[headers[value_index]] = bufer
+
+        return out
+
     # Документ из двух колонок
-    # Ключи в столбце key и значения в столбце value
+    # Ключи в столбце 'key' и значения в столбце 'value'
     if key in headers and value in headers:
         key_index = headers.index(key)
         value_index = headers.index(value)
 
-        out = {
-            line[key_index]: parser.jsonify(line[value_index])
-            for line in data if len(line[0]) > 0
-        }
+        out = {}
+        for line in data:
+            # Пропуск пустых строк
+            if not line[key_index]:
+                continue
+
+            out[line[key_index]] = parser.jsonify(line[value_index])
 
         return out
 
@@ -92,7 +129,7 @@ def save_json(data, title, path=''):
     if not title.endswith('.json'):
         title = f'{title}.json'
     
-    if not isinstance(type(data), dict):
+    if not isinstance(data, dict):
         data = json.loads(data)
 
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
@@ -125,91 +162,44 @@ def dict_to_str(source, tab='', count=0):
     return output[:-1]
 
 
-# Блок парсера конфигов!
-# Перевод из промежуточного формата конфигов в JSON
-def define_split_points(string, sep, **params):
+"""
+Template command handlers
+"""
+
+def command_extract(array):
     """
-    Define the positions of all separator characters in the string.
-    Ignores separators inside blocks enclosed by brackets.
+    extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
 
-    Args:
-        string (str): The original string to be parsed.
-        sep (str): The separator. Example: sep = '|'
-        params (dict): Additional parameters, including:
-            - br_block (str): Brackets for highlighting sub-blocks. Example: br_block = '{}'
-            - br_list (str): Brackets for highlighting lists. Example: br_list = '[]'
-            - raw_pattern (str): Raw pattern to avoid parsing. Example: raw_pattern = '!'
-
-    Yields:
-        int: Indices of separator characters.
+    Пример: По умолчанию парсер не разворачивает словари и они приходят вида [{'a': 1, 'b': 2}],
+    если обязательно нужен словарь, то extract развернёт полученный список до {'a': 1, 'b': 2}
     """
+    if len(array) == 1 and type(array) in (list, tuple):
+        return array[0]
+    return array
 
-    br_block = params.get('br_block')
-    br_list = params.get('br_list')
-    raw_pattern = params.get('raw_pattern')
-
-    # Brackets are grouped by types.
-    # All opening brackets increase the counter, closing brackets decrease it
-    br = {
-        br_block[0]: 1,
-        br_block[1]: -1,
-        br_list[0]: 1,
-        br_list[1]: -1
-    }
-
-    is_not_raw_block = True
-    count = 0
-
-    for i, letter in enumerate(string):
-        if letter == raw_pattern:
-            is_not_raw_block = not is_not_raw_block
-
-        elif (delta := br.get(letter)) is not None:
-            count += delta
-
-        elif letter == sep and count == 0 and is_not_raw_block:
-            yield i
-
-    yield len(string)
-
-def split_string_by_sep(string, sep, **params):
+def command_wrap(array):
     """
-    Разделение строки на массив подстрок по символу разделителю.
-    Не разделяет блоки выделенные скобками.
+    wrap -- Дополнительно заворачивает полученый список если первый элемент этого списка не является списком.
 
-    string - исходная строка для разбора
-    sep - разделитель. Пример: sep = '|'
-    br - тип скобок выделяющих подблоки. Пример: br = '{}'
+    Пример: Получен список [1, 2, 4], 1 - первый элемент, не список, тогда он дополнительно будет завернут [[1, 2, 4]].
+    Акутально для паралакса, когда остается только один слой.
+    Параллакс состоит из нескольких слоев и данные каждого слоя должны быть списком, когда остается только один слой,
+    то он разворачивается и на выходе получается список из значений одного слоя, что ломает клиент.
+    В списке должен быть один элемент - параметры параллакса.
+    """
+    if type(array[0]) not in (list, dict):
+        return [array]
+    return array
 
-    Генератор. Возвращает подстроки.
+def command_string(arg):
+    """
+    string -- Дополнительно заворачивает строку в кавычки. Все прочие типы данных оставляет как есть. Используется
+    когда заранее неизвестно будет ли там значение и выбор между null и строкой.
+    Например, в новостях мультиивентов поле "sns": {news_sns!string}.
+
+    Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
     """
 
-    prev = 0
-    for i in define_split_points(string, sep, **params):
-        yield string[prev:i].strip(sep).strip()
-        prev = i
-
-def parse_string(s, to_num=True):
-    """
-    Пытается перевести строку в число, предварительно определив что это было, int или float
-    Переводит true\false в "правильный" формат для JSON
-    """
-
-    string_mapping = {
-        'none': None,
-        'nan': None,
-        'null': None,
-        'true': True,
-        'false': False
-    }
-
-    if s.lower() in string_mapping:
-        return string_mapping[s.lower()]
-
-    if not to_num:
-        return s
-
-    try:
-        return ast.literal_eval(s)
-    except (ValueError, SyntaxError):
-        return s
+    if type(arg) is str:
+        return f'"{arg}"'
+    return arg

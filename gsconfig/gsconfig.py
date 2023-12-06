@@ -34,6 +34,29 @@ class Template(object):
     ВАЖНО! 
     1. command_letter всегда должен быть включен в pattern
     2. ключ + команда всегда должены быть в первой группе регулярного выражения
+
+    Дополнительные команды парсера:
+    dummy -- Пустышка, ничего не длает.
+
+    float -- Переводит в начения с плавающей запятой.
+    Пример: Получено число 10, в шаблон оно будет записано как 10.0
+
+    int -- Переводит в целые значения отбрасыванием дробной части
+    Пример: Получено число 10.9, в шаблон оно будет записано как 10
+
+    extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
+    Пример: По умолчанию парсер не разворачивает словари и они приходят вида [{'a': 1, 'b': 2}],
+    если обязательно нужен словарь, то extract развернёт полученный список до {'a': 1, 'b': 2}
+
+    wrap -- Дополнительно заворачивает полученый список если первый элемент этого списка не является списком.
+    Пример: Получен список [1, 2, 4], 1 - первый элемент, не список, тогда он дополнительно будет завернут [[1, 2, 4]].
+
+    string -- Дополнительно заворачивает строку в кавычки. Все прочие типы данных оставляет как есть. 
+    Используется когда заранее неизвестно будет ли там значение и выбор между null и строкой.
+    Например, в новостях мультиивентов поле "sns": {news_sns!string}.
+    Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
+
+
     """
     def __init__(self, path='', body='', pattern=None, command_letter=None):
         self.path = path
@@ -43,7 +66,9 @@ class Template(object):
             'dummy': lambda x: x,
             'float': lambda x: float(x),
             'int': lambda x: int(x),
-            'str': lambda x: str(x)
+            'string': tools.command_string,
+            'extract': tools.command_extract,
+            'wrap': tools.command_wrap
         }
         self._body = body
         self._keys = []
@@ -86,6 +111,9 @@ class Template(object):
             self._keys = re.findall(self.pattern, self.body)
         return self._keys
 
+    def __str__(self):
+        return self.title
+
     def _calculate_name_and_extension(self) -> dict:
         r = self.title.split('.')
         return {'name': r[0], 'extension': r[-1]}
@@ -107,10 +135,22 @@ class Template(object):
         
         self._body = body
 
-    def make(self, data) -> str:
+    def make(self, balance:dict, strip:bool=True) -> str:
         """
         Заполняет шаблон данными.
         ВАЖНО! Для сохранения в JSON необходимо заполнять все поля шаблона!
+        
+        balance -- словарь (dict) с балансом (данными для подстановки), где:
+            key - переменная, которую необходимо заменить
+            value - значение для замены
+
+        strip -- Будет ли отрезать от строк лишние кавычки. 
+            True (по умолчанию) - Отрезает кавычки от строк. 
+            В шаблоне НЕОБХОДИМО проставлять кавычки для всех строковых данных.
+            Либо явно указывать трансформацию в строку при помощи команды !string
+
+            False - Строки будут автоматически завернуты в кавычки. 
+            Невозможно использовать переменные в подстроках.
         """
 
         def replace_keys(match):
@@ -120,9 +160,10 @@ class Template(object):
             key = key_command_pair[0]
 
             # Обработка ошибки отсутствия ключа
-            if key not in data:
-                raise KeyError(f"Key '{key}' not found in template data.")
-            insert_data = data[key]
+            if key not in balance:
+                raise KeyError(f"Key '{key}' not found in balance.")
+            
+            insert_balance = balance[key]
 
             # Команда ВСЕГДА идет после command_letter!
             if self.command_letter in match.group(1):
@@ -131,9 +172,13 @@ class Template(object):
                 # Обработка ошибки отсутствия команды
                 if command not in self.command_handlers:
                     raise ValueError(f"Command '{command}' is not supported by Template class")
-                insert_data = self.command_handlers[command](insert_data)
+                insert_balance = self.command_handlers[command](insert_balance)
 
-            return str(insert_data)
+            # Возвращаем строки как есть
+            if strip and isinstance(insert_balance, str):
+                return insert_balance
+
+            return json.dumps(insert_balance)
 
         return re.sub(self.pattern, replace_keys, self.body)
 
@@ -212,10 +257,19 @@ class Page(object):
             raise TypeError('key_skip_letters must be a list or a set!')
         self.key_skip_letters = set(key_skip_letters)
 
-    def get(self, format=None, mode=None, **params):
+    def get(self, format=None, mode=None, scheme=None, **params):
         """
-        Retrieves data from the page in a format appropriate for its type.
-        If the format is not specified separately and not set by the user, it tries to get it as raw
+        Возвращает данные в формате страницы. См. описание format ниже
+        В случае, когда формат не указан возвращает сырые данные как двумерный массив.
+
+        Понимает несколько схем компановки данных. Проверка по очереди:
+        1. Указана схема данных (заголовки столбца ключей и данных). См. описание scheme ниже
+        2. ДВЕ колонки. В первой строке есть ОБА ключа 'key' и 'value'
+        3. Свободный формат, первая строка - ключи, все последуюшие - данные
+
+        Схема в две колонки упрощенная версия формата со схемой. Результатом будет словарь 
+        с парами ключ = значение. В случае указания схемы, данные будут дополнительно 
+        завернуты в словари с названием столбца данных.
         
         format -- data storage format
             json - collects into a dictionary and parses values
@@ -224,6 +278,20 @@ class Page(object):
         
         mode -- whether to parse data or not
             raw - data will always be returned WITHOUT parsing
+
+        scheme -- схема хранения данных в несколько колонок на странице.
+            Словарь вида (Названия ключей словаря фиксированы!):
+            scheme = {
+                'key': 'key'  # Название столбца с данными
+                'data': [value_1, value_2]  # Список столбцов данных
+            }
+
+        Параметры только для формата в ДВЕ колонки. 
+        Можно задать кастомные значения названия полей ключей и данных
+            key - заголовок столбца ключей
+            value - заголовок столбца данных
+
+        **params - все параметры доступные для парсера parser.jsonify
         """
 
         if not self._cache:
@@ -232,6 +300,8 @@ class Page(object):
         params['is_raw'] = mode == 'raw'
         params['key_skip_letters'] = self.key_skip_letters
         params['parser_version'] = self.parser_version
+        params['scheme'] = scheme
+        
         format = format or self.format
 
         return self.parsers[format](self._cache, **params)
