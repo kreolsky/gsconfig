@@ -1,12 +1,11 @@
 __pycache__
 
-gspread/
-build/
-dist/
-gsconfig.egg-info/
-_json/
-_backup/
+MANIFEST.in
+setup.py
+build
+dist
+gsconfig.egg-info
+_json
+json
 google_oauth2_token.json
-pen_sample.py
-trash.py
 TODO.md
