@@ -1,11 +1,8 @@
 __pycache__
 .DS_Store
-MANIFEST.in
-setup.py
 build
 dist
 gsconfig.egg-info
 _json
 json
 google_oauth2_token.json
-TODO.md
