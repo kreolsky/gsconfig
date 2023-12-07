@@ -458,7 +458,7 @@ class GameConfig(object):
         self.key_skip_letters = {'#', '.'}
         self.parser_version = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
 
-        self._cache = {}
+        self._cache = []
         self._max_workers = 5
 
     @property
