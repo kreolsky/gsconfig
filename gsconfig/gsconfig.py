@@ -444,22 +444,15 @@ class GameConfigLite(Document):
 class GameConfig(object):
     """
     Обьект содержащий все конфиги указанные в настройках.
-    Принимает настройки в виде словаря.
+    Для получения из конфига документа по названию используется имя таблицы.
 
-    settings -- словарь настроек вида {document_title: document_id, ...}
-        document_title -- название
-        document_id -- id таблицы
-
-        ВАЖНО! Для получения из конфига документа по названию используется имя таблицы! 
-        document_title исключительно как подсказка для визуального представления конфига.
-        Рекомендую забирать настройки из таблицы где поддерживается консистентность.
-
+    spreadsheet_ids -- Список id входящих в конфиг документов
     client -- Клиент авторизации
     """
 
-    def __init__(self, settings={}, client=None):
+    def __init__(self, spreadsheet_ids=[], client=None):
         self.client = client or gspread.oauth()
-        self.settings = settings
+        self.spreadsheet_ids = spreadsheet_ids
 
         self.page_skip_letters = {'#', '.'}
         self.key_skip_letters = {'#', '.'}
@@ -472,7 +465,7 @@ class GameConfig(object):
     def documents(self) -> list:
         if not self._cache:
             with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
-                self._cache = list(pool.map(self._create_document, self.settings.values()))
+                self._cache = list(pool.map(self._create_document, self.spreadsheet_ids))
 
         return self._cache
     
