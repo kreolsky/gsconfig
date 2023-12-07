@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 
 from . import tools
+from . import gsparser
 
 
 class GSConfigError(Exception):
@@ -257,6 +258,18 @@ class Page(object):
             raise TypeError('key_skip_letters must be a list or a set!')
         self.key_skip_letters = set(key_skip_letters)
 
+    def set_parser_version(self, parser_version):
+        """
+        Указать версию парсера
+        """
+        
+        # Взять версии парсера из обьекта парсера
+        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_PARSER_VESRION
+        if parser_version not in available_versions:
+            raise ValueError(f'The version is not available. Available versions are: {available_versions}')
+
+        self.parser_version = parser_version
+
     def get(self, format=None, mode=None, scheme=None, **params):
         """
         Возвращает данные в формате страницы. См. описание format ниже
@@ -338,8 +351,12 @@ class Document(object):
     def _create_page(self, worksheet):
         page = Page(worksheet)
         page.set_key_skip_letters(self.key_skip_letters)
-        page.parser_version = self.parser_version
+        page.set_parser_version(self.parser_version)
         return page
+
+    @property
+    def title(self):
+        return self.spreadsheet.title
 
     @property
     def page1(self):
@@ -379,6 +396,28 @@ class Document(object):
         if not isinstance(key_skip_letters, (list, set)):
             raise TypeError('key_skip_letters must be a list or a set!')
         self.key_skip_letters = set(key_skip_letters)
+    
+    def set_parser_version(self, parser_version):
+        """
+        Указать версию парсера
+        """
+        
+        # Взять версии парсера из обьекта парсера
+        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_PARSER_VESRION
+        if parser_version not in available_versions:
+            raise ValueError(f'The version is not available. Available versions are: {available_versions}')
+
+        self.parser_version = parser_version
+
+    def save(self, path='', mode=''):
+        """
+        If mode = 'full' is specified, it tries to save all pages of the document.
+        IMPORTANT! Working pages are usually not prepared for saving and will fail.
+        """
+
+        pages = self.pages() if mode == 'full' else self
+        for page in pages:
+            tools.save_page(page, path)
 
 
 class GameConfigLite(Document):
@@ -401,109 +440,57 @@ class GameConfigLite(Document):
 
         return self.client.open_by_key(self.spreadsheet_id)
 
-    def save(self, path='', mode=''):
-        """
-        If mode = 'full' is specified, it tries to save all pages of the document.
-        IMPORTANT! Working pages are usually not prepared for saving and will fail.
-        """
-
-        pages = self if mode == 'full' else self.pages()
-        for page in pages:
-            tools.save_page(page, path)
-
 
 class GameConfig(object):
     """
     Обьект содержащий все конфиги указанные в настройках.
-    Принимает настройки как из гуглотаблицы так и в виде словаря. Если указано и то и то,
-    то будет использован словарь.
+    Принимает настройки в виде словаря.
 
-    settings -- словарь настроек.
-    Либо id документа и название вкладки со списком всех документов конфига
-        spreadsheet_id -- id таблицы со списко конфигов
-        page_title -- заголовок страницы в таблице со списком документов конфига
-
-    Либо словарь вида {document_title: spreadsheet_id, ...}
+    settings -- словарь настроек вида {document_title: document_id, ...}
         document_title -- название
-        spreadsheet_id -- id документа
+        document_id -- id таблицы
 
-    backup -- словарь со списком документов конфига и настройками конфига.
-    Необходимо для восстановления обьекта конфига ииз бекапа.
+        ВАЖНО! Для получения из конфига документа по названию используется имя таблицы! 
+        document_title исключительно как подсказка для визуального представления конфига.
+        Рекомендую забирать настройки из таблицы где поддерживается консистентность.
+
+    client -- Клиент авторизации
     """
 
-    def __init__(self, client, settings={}, backup=None):
-        self.client = client
-        self._settings = None
-        self._settings_gspread_id = None
-        self._documents = None
-        self._documents_to_export = None
+    def __init__(self, settings={}, client=None):
+        self.client = client or gspread.oauth()
+        self.settings = settings
 
-        if backup:
-            self._documents = [Document(x) for x in backup['documents']]
-            self._settings = backup['settings']
+        self.page_skip_letters = {'#', '.'}
+        self.key_skip_letters = {'#', '.'}
+        self.parser_version = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
 
-        elif 'spreadsheet_id' in settings:
-            self._settings_gspread_id = settings['spreadsheet_id']
-            self._settings_page_title = settings['page_title']
-
-        elif settings:
-            self._settings = {
-                key : self.client.open_by_key(value)
-                for key, value in settings.items()
-            }
-
-    def __repr__(self):
-        return f'{self.__class__.__name__}: ' + ', '.join([x.title for x in self.documents])
-
-    def __iter__(self) -> Document:
-        for document in self.documents:
-            yield(document)
-
-    def __getitem__(self, title):
-        return self.document(title)
+        self._cache = {}
+        self._max_workers = 5
 
     @property
     def documents(self) -> list:
-        if not self._documents:
-            self.pull()
+        if not self._cache:
+            with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
+                self._cache = list(pool.map(self._create_document, self.settings.values()))
 
-        return self._documents
+        return self._cache
+    
+    def __iter__(self):
+        for document in self.documents:
+            yield(document)
+    
+    def __getitem__(self, title):
+        result = next(filter(lambda x: x.title == title, self.documents), None)
+        if result is None:
+            raise KeyError(f'No document found with title "{title}"')
+        
+        return result
 
-    @property
-    def documents_to_export(self):
-        if not self._documents_to_export:
-            self._documents_to_export = self.settings.values()
+    def _create_document(self, document_id):
+        document = Document(self.client.open_by_key(document_id))
+        document.set_page_skip_letters(self.page_skip_letters)
+        document.set_key_skip_letters(self.key_skip_letters)
+        document.set_parser_version(self.parser_version)
 
-        return self._documents_to_export
-
-    @property
-    def settings(self):
-        if not self._settings:
-            settings_obj = self.client.open_by_key(self._settings_gspread_id).pull()
-            settings = settings_obj[self._settings_page_title].get_as_json()
-
-            self._settings = {
-                key : self.client.open_by_key(value)
-                for key, value in settings.items()
-            }
-
-        return self._settings
-
-    def document(self, title):
-        return next(filter(lambda x: x.title == title, self.documents))
-
-    def set_documents_to_export(self, documents_list):
-        if not all([x in self.settings for x in documents_list]):
-            raise GSConfigError(f'Incorrect documents! Available documents is {list(self.settings.keys())}')
-
-        self._documents_to_export = [self.settings[x] for x in documents_list]
-
-    def _get_document(self, gspread_obj):
-        return gspread_obj.pull()
-
-    def pull(self, max_workers=5):
-        if not self._documents:
-            with ThreadPoolExecutor(max_workers=max_workers) as pool:
-                self._documents = list(pool.map(self._get_document, [x for x in self.documents_to_export]))
-
-        return self._documents
+        return document

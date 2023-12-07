@@ -129,7 +129,7 @@ def save_json(data, title, path=''):
     if not title.endswith('.json'):
         title = f'{title}.json'
     
-    if not isinstance(data, dict):
+    if isinstance(data, str):
         data = json.loads(data)
 
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:

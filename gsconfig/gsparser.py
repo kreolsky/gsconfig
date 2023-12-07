@@ -339,6 +339,7 @@ class ConfigJSONConverter:
 
     True - не парсит, возвращает как есть.
     """
+    AVAILABLE_PARSER_VESRION = ('v1', 'v2')
 
     def __init__(self, params=None):
         self.default_params = {
