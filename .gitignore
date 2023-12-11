@@ -3,7 +3,6 @@ __pycache__
 build
 dist
 gsconfig.egg-info
-_json
-json
 google_oauth2_token.json
-pen_sample.ipynb
+pen_sample*
+_pen_sample*

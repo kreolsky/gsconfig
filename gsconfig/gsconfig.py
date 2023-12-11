@@ -264,7 +264,7 @@ class Page(object):
         """
         
         # Взять версии парсера из обьекта парсера
-        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_PARSER_VESRION
+        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_VESRIONS
         if parser_version not in available_versions:
             raise ValueError(f'The version is not available. Available versions are: {available_versions}')
 
@@ -402,8 +402,8 @@ class Document(object):
         Указать версию парсера
         """
         
-        # Взять версии парсера из обьекта парсера
-        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_PARSER_VESRION
+        # Взять версии парсера из класса парсера
+        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_VESRIONS
         if parser_version not in available_versions:
             raise ValueError(f'The version is not available. Available versions are: {available_versions}')
 
