@@ -56,9 +56,8 @@ class Template(object):
     Используется когда заранее неизвестно будет ли там значение и выбор между null и строкой.
     Например, в новостях мультиивентов поле "sns": {news_sns!string}.
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
-
-
     """
+
     def __init__(self, path='', body='', pattern=None, command_letter=None):
         self.path = path
         self.pattern = pattern or r'\{([a-z0-9_!]+)\}'
