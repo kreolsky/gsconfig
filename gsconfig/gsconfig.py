@@ -23,20 +23,20 @@ class Template(object):
     Класс шаблона из которого будет генериться конфиг.
     Паттерн ключа и символ отделяющий команду можно переопределить.
 
-    path -- путь для файла шаблона    
-    body -- можно задать шаблон как строку
-    pattern -- паттерн определения ключа в шаблоне. r'\{([a-z0-9_!]+)\}' - по умолчанию
-    command_letter -- символ отделяющий команду от ключа. '!' - по умолчанию
+    - path -- путь для файла шаблона  
+    - body -- можно задать шаблон как строку
+    - pattern -- паттерн определения ключа в шаблоне. r'\{([a-z0-9_!]+)\}' - по умолчанию
+    - command_letter -- символ отделяющий команду от ключа. '!' - по умолчанию
 
     Пример ключа в шаблоне: {cargo_9!float}. Где, 
-    'cargo_9' -- ключ для замены (допустимые символы a-z0-9_)
-    'float' -- указывает что оно всегда должно быть типа float
+    - 'cargo_9' -- ключ для замены (допустимые символы a-z0-9_)
+    - 'float' -- дополнительная команда указывает что оно всегда должно быть типа float
 
     ВАЖНО! 
     1. command_letter всегда должен быть включен в pattern
     2. ключ + команда всегда должены быть в первой группе регулярного выражения
 
-    Дополнительные команды парсера:
+    Дополнительные команды доступные в ключах шаблона:
     dummy -- Пустышка, ничего не длает.
 
     float -- Переводит в начения с плавающей запятой.
@@ -259,7 +259,7 @@ class Page(object):
 
     def set_parser_version(self, parser_version):
         """
-        Указать версию парсера
+        Указать версию парсера (конвертора из формата конфигов в JSON)
         """
         
         # Взять версии парсера из обьекта парсера
@@ -364,7 +364,7 @@ class Document(object):
         that do NOT start with symbols in page_skip_letters.
         """
 
-        for page in self.pages():
+        for page in self:
             return page
 
     @property
@@ -398,7 +398,7 @@ class Document(object):
     
     def set_parser_version(self, parser_version):
         """
-        Указать версию парсера
+        Указать версию парсера (конвертора из формата конфигов в JSON)
         """
         
         # Взять версии парсера из класса парсера
@@ -421,7 +421,13 @@ class Document(object):
 
 class GameConfigLite(Document):
     """
-    Game configuration consisting of only one Google Sheet.
+    GameConfigLite - Игровой конфиг состоящий только из одного документа. 
+    Наследуется от класса Document и определяется id документа и обьектом GoogleOauth.
+    
+    См подробности по аутентификации тут: https://docs.gspread.org/en/latest/oauth2.html
+    
+    - spreadsheet_id -- id таблицы
+    - client -- клиент авторизации GoogleOauth. 
     """
 
     def __init__(self, spreadsheet_id, client=None):
@@ -442,11 +448,14 @@ class GameConfigLite(Document):
 
 class GameConfig(object):
     """
-    Обьект содержащий все конфиги указанные в настройках.
+    GameConfig - Обьект содержащий все документы конфигов указанные в настройках.
     Для получения из конфига документа по названию используется имя таблицы.
+    Определяется списком id входящих в конфиг документов и обьектом GoogleOauth.
+    
+    См подробности по аутентификации тут: https://docs.gspread.org/en/latest/oauth2.html
 
-    spreadsheet_ids -- Список id входящих в конфиг документов
-    client -- Клиент авторизации
+    - spreadsheet_ids -- Список id входящих в конфиг документов
+    - client -- клиент авторизации GoogleOauth. 
     """
 
     def __init__(self, spreadsheet_ids=[], client=None):
