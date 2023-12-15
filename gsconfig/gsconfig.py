@@ -495,3 +495,15 @@ class GameConfig(object):
         document.set_parser_version(self.parser_version)
 
         return document
+
+    def set_parser_version(self, parser_version):
+        """
+        Указать версию парсера (конвертора из формата конфигов в JSON)
+        """
+        
+        # Взять версии парсера из класса парсера
+        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_VESRIONS
+        if parser_version not in available_versions:
+            raise ValueError(f'The version is not available. Available versions are: {available_versions}')
+
+        self.parser_version = parser_version
