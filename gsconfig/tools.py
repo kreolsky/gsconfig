@@ -15,23 +15,31 @@ def parser_json(page_data, **params):
     
     Понимает несколько схем компановки данных. Проверка по очереди:
     1. Указана схема данных (заголовки столбца ключей и данных). См. описание scheme ниже
-    2. ДВЕ колонки. В первой строке есть ОБА ключа 'key' и 'value'
-    3. Свободный формат, первая строка - ключи, все последуюшие - данные
+    2. Свободный формат, первая строка - ключи, все последуюшие - данные
 
     Схема в две колонки упрощенная версия формата со схемой. Результатом будет словарь 
     с парами ключ = значение. В случае указания схемы, данные будут дополнительно 
     завернуты в словари с названием столбца данных.
     
-    Параметры только для формата в ДВЕ колонки. 
-    Можно задать кастомные значения названия полей ключей и данных
-        key - заголовок столбца ключей
-        value - заголовок столбца данных
+    format -- data storage format
+        json - collects into a dictionary and parses values
+        csv - returns data as a two-dimensional array. Always WITHOUT parsing!
+        raw - returns data as a two-dimensional array. Always WITHOUT parsing!
+    
+    mode -- whether to parse data or not
+        raw - data will always be returned WITHOUT parsing
 
-    **params - все параметры доступные для парсера parser.jsonify
+    scheme -- схема хранения данных в несколько колонок на странице.
+        Обычная схема. Словарь вида (Названия ключей словаря фиксированы!):
+        scheme = {
+            'key': 'key'  # Название столбца с данными
+            'data': ['value_1', 'value_2']  # Список столбцов данных
+        }
+
+        Упрощенная схема. Указана по умолчанию. Кортеж из 2х элементов:
+        scheme = ('key', 'data')
     """
 
-    key = params.get('key', 'key')
-    value = params.get('value', 'value')
     scheme = params.get('scheme')
     key_skip_letters = params.get('key_skip_letters', [])
 
@@ -41,39 +49,43 @@ def parser_json(page_data, **params):
     # Парсер конфигов из гуглодоки в JSON
     parser = gsparser.ConfigJSONConverter(params)
 
-    # Документ из произвольного числа колонок
-    # Указана схема (scheme) хранения данных
-    if scheme:
+    # Указана схема (scheme) хранения данных. Данные в несоклько колонок 
+    # sheme = {'key': 'key', 'data': ('value_1', 'value_2')}, где 
+    # 'key' - название столбца с ключами 
+    # 'data' - контеж названий столбцов с данными
+    if isinstance(scheme, dict):
         key = scheme.get('key', 'key')
         key_index = headers.index(key)
-        value_indexes = [headers.index(x) for x in scheme['data']]
+        data_indexes = [headers.index(x) for x in scheme['data']]
         # Первый столбец проходит как дефолтный, 
         # из него брать данные если в других столбцах пусто
-        default_value_index = value_indexes[0]
+        default_data_index = data_indexes[0]
 
         out = {}
-        for value_index in value_indexes:
+        for data_index in data_indexes:
             bufer = {}
             for line in data:
                 # Пропуск пустых строк
                 if not line[key_index]:
                     continue
 
-                line_data = line[value_index]
+                line_data = line[data_index]
                 # Если данные пустые, то брать из дефолтного столбца
                 if not line_data:
-                    line_data = line[default_value_index]
+                    line_data = line[default_data_index]
                 
                 bufer[line[key_index]] = parser.jsonify(line_data)
-            out[headers[value_index]] = bufer
+            out[headers[data_index]] = bufer
 
         return out
 
-    # Документ из двух колонок
-    # Ключи в столбце 'key' и значения в столбце 'value'
-    if key in headers and value in headers:
-        key_index = headers.index(key)
-        value_index = headers.index(value)
+    # Простая схема данных. Документ из двух колонок 
+    # sheme = ('key', 'data'), где 
+    # 'key' - название столбца с ключами 
+    # 'data' - название столбца с данными
+    if isinstance(scheme, tuple) and scheme[0] in headers and scheme[-1] in headers:
+        key_index = headers.index(scheme[0])
+        data_index = headers.index(scheme[-1])
 
         out = {}
         for line in data:
@@ -81,7 +93,7 @@ def parser_json(page_data, **params):
             if not line[key_index]:
                 continue
 
-            out[line[key_index]] = parser.jsonify(line[value_index])
+            out[line[key_index]] = parser.jsonify(line[data_index])
 
         return out
 

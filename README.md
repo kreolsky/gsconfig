@@ -1,4 +1,4 @@
-# From Google spreadsheets to JSON
+# Game Config Tools over Google Spreadsheets
 
 Или как делать навороченные игровые конфиги силами одного гейм-дизайнера.
 
