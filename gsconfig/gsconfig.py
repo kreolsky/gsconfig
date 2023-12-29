@@ -527,6 +527,11 @@ class GameConfig(object):
 
         self.parser_version = parser_version
     
-    def save(self, path):
+    def save(self, path='', mode=''):
+        """
+        If mode = 'full' is specified, it tries to save all pages of the document.
+        IMPORTANT! Working pages are usually not prepared for saving and will fail.
+        """
+
         for document in self.documents:
-            document.save(path)
+            document.save(path, mode)
