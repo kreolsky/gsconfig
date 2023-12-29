@@ -192,9 +192,11 @@ class Page(object):
         self.worksheet = worksheet  # Source gspread.Worksheet object
         self.key_skip_letters = set()
         self.parser_version = None
+        self.scheme = ('key', 'data')  # Схема хранение данных в двух столбцах
+        self.is_raw = False  # По умолчанию всегда будет парсить данные при сохранении в json 
         self._cache = None
         self._name_and_format = None
-        self.parsers = {
+        self._parsers = {
             'raw': tools.parser_dummy,
             'csv': tools.parser_dummy,
             'json': tools.parser_json
@@ -223,8 +225,13 @@ class Page(object):
     @property
     def format(self):
         """
-        Determines the data format based on the page title.
-        If nothing is specified, it is determined as raw.
+        Формат определяется расширением указанным в названии страницы. 
+        'raw' - если ничего не указано.
+
+        Доступные формата:
+        - json - Возвращает словарь. ПАРСИТ данные
+        - csv - Воззвращает двумерный массив. НЕ парсит данные!
+        - raw - Воззвращает двумерный массив. НЕ парсит данные!
         """
 
         if not self._name_and_format:
@@ -234,7 +241,7 @@ class Page(object):
     def _calculate_name_and_format(self):
         name = self.title
         format = 'raw'
-        for parser_key in self.parsers.keys():
+        for parser_key in self._parsers.keys():
             if name.endswith(f'.{parser_key}'):
                 name = name[:-len(parser_key) - 1]
                 format = parser_key
@@ -269,36 +276,46 @@ class Page(object):
 
         self.parser_version = parser_version
 
-    def get(self, format=None, mode=None, scheme=None, **params):
+    def set_scheme(self, scheme):
         """
-        Возвращает данные в формате страницы. См. описание format ниже
-        В случае, когда формат не указан возвращает сырые данные как двумерный массив.
-
-        Понимает несколько схем компановки данных. Проверка по очереди:
-        1. Указана схема данных (заголовки столбца ключей и данных). См. описание scheme ниже
-        2. Свободный формат, первая строка - ключи, все последуюшие - данные
-
-        Схема в две колонки упрощенная версия формата со схемой. Результатом будет словарь 
-        с парами ключ = значение. В случае указания схемы, данные будут дополнительно 
-        завернуты в словари с названием столбца данных.
-        
-        format -- data storage format
-            json - collects into a dictionary and parses values
-            csv - returns data as a two-dimensional array. Always WITHOUT parsing!
-            raw - returns data as a two-dimensional array. Always WITHOUT parsing!
-        
-        mode -- whether to parse data or not
-            raw - data will always be returned WITHOUT parsing
+        Задает схему формата данных в столбцах.
 
         scheme -- схема хранения данных в несколько колонок на странице.
-            Обычная схема. Словарь вида (Названия ключей словаря фиксированы!):
-            scheme = {
-                'key': 'key'  # Название столбца с данными
-                'data': ['value_1', 'value_2']  # Список столбцов данных
-            }
 
-            Упрощенная схема. Указана по умолчанию. Кортеж из 2х элементов:
-            scheme = ('key', 'data')
+        Упрощенная схема. Всегда указана по умолчанию. 
+        Данные будут выгружены как словарь из пар в столбцах key = data
+        Кортеж из 2х элементов: scheme = ('key', 'data'), где
+        'key' - названия столбца с ключами
+        'data' - названия столбца с данными
+        
+        Обычная схема. Данные будут дополнительно завернуты в словари с названием столбца данных.
+        Словарь вида (Названия ключей словаря фиксированы!):
+        scheme = {
+            'key': 'key'  # Название столбца с данными
+            'data': ['value_1', 'value_2']  # Список названий столбцов данных
+        }
+        """
+
+        if type(scheme) not in (tuple, dict):
+            raise ValueError(f'The scheme should be tuple or dict!')
+
+        self.scheme = scheme
+
+    def set_raw_mode(self):
+        """
+        Если установлено, данные при сохранении в json не будут парсится.
+        """
+
+        self.is_raw = True
+
+    def get(self, **params):
+        """
+        Возвращает данные в формате страницы. См. описание format ниже
+        Когда формат не указан - возвращает сырые данные как двумерный массив.
+
+        Понимает несколько схем компановки данных. Проверка по очереди:
+        1. Используется схема данных. См. self.scheme и set_scheme()
+        2. Свободный формат, первая строка - ключи, все последуюшие - данные
 
         **params - все параметры доступные для парсера parser.jsonify
         """
@@ -306,14 +323,19 @@ class Page(object):
         if not self._cache:
             self._cache = self.worksheet.get_all_values()
 
-        params['is_raw'] = mode == 'raw'
+        params['is_raw'] = self.is_raw
+        params['scheme'] = self.scheme
         params['key_skip_letters'] = self.key_skip_letters
         params['parser_version'] = self.parser_version
-        params['scheme'] = scheme or ('key', 'data')
         
-        format = format or self.format
+        return self._parsers[self.format](self._cache, **params)
+    
+    def save(self, path='', mode=None):
+        """
+        Сохраняет страницу по указанному пути
+        """
 
-        return self.parsers[format](self._cache, **params)
+        tools.save_page(self, path)
 
 
 class Document(object):
@@ -413,7 +435,7 @@ class Document(object):
 
         pages = self.pages() if mode == 'full' else self
         for page in pages:
-            tools.save_page(page, path)
+            page.save(path)
 
 
 class GameConfigLite(Document):
@@ -504,3 +526,7 @@ class GameConfig(object):
             raise ValueError(f'The version is not available. Available versions are: {available_versions}')
 
         self.parser_version = parser_version
+    
+    def save(self, path):
+        for document in self.documents:
+            document.save(path)

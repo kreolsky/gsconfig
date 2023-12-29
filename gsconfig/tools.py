@@ -13,31 +13,13 @@ def parser_json(page_data, **params):
     """
     Парсит данные из гуглодоки в формат JSON. См. parser.jsonify
     
+    Когда формат не указан - возвращает сырые данные как двумерный массив.
+
     Понимает несколько схем компановки данных. Проверка по очереди:
-    1. Указана схема данных (заголовки столбца ключей и данных). См. описание scheme ниже
+    1. Используется схема данных. См. Page.scheme и Page.set_scheme()
     2. Свободный формат, первая строка - ключи, все последуюшие - данные
 
-    Схема в две колонки упрощенная версия формата со схемой. Результатом будет словарь 
-    с парами ключ = значение. В случае указания схемы, данные будут дополнительно 
-    завернуты в словари с названием столбца данных.
-    
-    format -- data storage format
-        json - collects into a dictionary and parses values
-        csv - returns data as a two-dimensional array. Always WITHOUT parsing!
-        raw - returns data as a two-dimensional array. Always WITHOUT parsing!
-    
-    mode -- whether to parse data or not
-        raw - data will always be returned WITHOUT parsing
-
-    scheme -- схема хранения данных в несколько колонок на странице.
-        Обычная схема. Словарь вида (Названия ключей словаря фиксированы!):
-        scheme = {
-            'key': 'key'  # Название столбца с данными
-            'data': ['value_1', 'value_2']  # Список столбцов данных
-        }
-
-        Упрощенная схема. Указана по умолчанию. Кортеж из 2х элементов:
-        scheme = ('key', 'data')
+    **params - все параметры доступные для парсера parser.jsonify
     """
 
     scheme = params.get('scheme')
@@ -125,7 +107,7 @@ def save_page(page, path=''):
     if not isinstance(page, gsconfig.Page):
         raise gsconfig.GSConfigError('Object must be of Page type!')
 
-    save_func = save_page_functions.get(page.format, save_csv)
+    save_func = save_page_functions.get(page.format, save_raw)
     return save_func(page.get(), page.name, path)
 
 def save_csv(data, title, path=''):
@@ -153,6 +135,8 @@ def save_raw(data, title, path=''):
 
 save_page_functions = {
     'json': save_json,
+    'raw': save_raw,
+    'csv': save_csv
 }
 
 def dict_to_str(source, tab='', count=0):
