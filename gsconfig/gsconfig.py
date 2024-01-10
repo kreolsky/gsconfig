@@ -27,6 +27,13 @@ class Template(object):
     - body -- можно задать шаблон как строку
     - pattern -- паттерн определения ключа в шаблоне. r'\{([a-z0-9_!]+)\}' - по умолчанию
     - command_letter -- символ отделяющий команду от ключа. '!' - по умолчанию
+    - jsonify  -- Отдавать результат как словарь. False - по умолчанию (отдает как строку)
+    - strip -- Будет ли отрезать от строк лишние кавычки. 
+        True (по умолчанию) -- Отрезает кавычки от строк. 
+        В шаблоне НЕОБХОДИМО проставлять кавычки для всех строковых данных.
+        Либо явно указывать трансформацию в строку при помощи команды !string
+        False -- Строки будут автоматически завернуты в кавычки. 
+        Невозможно использовать переменные в подстроках.
 
     Пример ключа в шаблоне: {cargo_9!float}. Где, 
     - 'cargo_9' -- ключ для замены (допустимые символы a-z0-9_)
@@ -34,7 +41,7 @@ class Template(object):
 
     ВАЖНО! 
     1. command_letter всегда должен быть включен в pattern
-    2. ключ + команда всегда должены быть в первой группе регулярного выражения
+    2. ключ + команда в pattern всегда должены быть в первой группе регулярного выражения
 
     Дополнительные команды доступные в ключах шаблона:
     dummy -- Пустышка, ничего не длает.
@@ -58,10 +65,12 @@ class Template(object):
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
     """
 
-    def __init__(self, path='', body='', pattern=None, command_letter=None):
+    def __init__(self, path='', body='', pattern=None, command_letter=None, strip=True, jsonify=False):
         self.path = path
         self.pattern = pattern or r'\{([a-z0-9_!]+)\}'
         self.command_letter = command_letter or '!'
+        self.strip = strip
+        self.jsonify = jsonify
         self.command_handlers = {
             'dummy': lambda x: x,
             'float': lambda x: float(x),
@@ -79,7 +88,7 @@ class Template(object):
 
     @property
     def name(self) -> str:
-        return self._calculate_name_and_extension()['name']
+        return self.name_and_extension[0]
     
     @property
     def body(self) -> str:
@@ -111,12 +120,12 @@ class Template(object):
             self._keys = re.findall(self.pattern, self.body)
         return self._keys
 
+    @property
+    def name_and_extension(self) -> dict:
+        return self.title.rsplit('.', 1)
+
     def __str__(self):
         return self.title
-
-    def _calculate_name_and_extension(self) -> dict:
-        r = self.title.split('.')
-        return {'name': r[0], 'extension': r[-1]}
     
     def set_path(self, path=''):
         if not path:
@@ -135,7 +144,7 @@ class Template(object):
         
         self._body = body
 
-    def make(self, balance:dict, strip:bool=True) -> str:
+    def make(self, balance:dict):
         """
         Заполняет шаблон данными.
         ВАЖНО! Для сохранения в JSON необходимо заполнять все поля шаблона!
@@ -144,6 +153,8 @@ class Template(object):
             key - переменная, которую необходимо заменить
             value - значение для замены
 
+        Свойства класса влияющие на сборку конфига из шаблона:
+        
         strip -- Будет ли отрезать от строк лишние кавычки. 
             True (по умолчанию) - Отрезает кавычки от строк. 
             В шаблоне НЕОБХОДИМО проставлять кавычки для всех строковых данных.
@@ -151,6 +162,8 @@ class Template(object):
 
             False - Строки будут автоматически завернуты в кавычки. 
             Невозможно использовать переменные в подстроках.
+        
+        jsonify -- Забрать как словарь. False - по умолчанию, забирает как строку.
         """
 
         def replace_keys(match):
@@ -175,12 +188,18 @@ class Template(object):
                 insert_balance = self.command_handlers[command](insert_balance)
 
             # Возвращаем строки как есть
-            if strip and isinstance(insert_balance, str):
+            if self.strip and isinstance(insert_balance, str):
                 return insert_balance
 
             return json.dumps(insert_balance)
 
-        return re.sub(self.pattern, replace_keys, self.body)
+        out = re.sub(self.pattern, replace_keys, self.body)
+        
+        # Преобразовать в JSON
+        if self.jsonify:
+            out = json.loads(out)
+
+        return out
 
 
 class Page(object):
@@ -330,7 +349,7 @@ class Page(object):
         
         return self._parsers[self.format](self._cache, **params)
     
-    def save(self, path='', mode=None):
+    def save(self, path=''):
         """
         Сохраняет страницу по указанному пути
         """

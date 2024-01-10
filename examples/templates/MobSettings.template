@@ -1,0 +1,42 @@
+{
+  "_maxHealth": {health!float},
+  "_timeToStartRegeneration": {time_before_regen!float},
+  "_regenerationSpeed": {regen_speed!float},
+
+  "_botRewards": {bot_rewards},
+
+  "_massa": {weight!float},
+
+  "MoveToPointSettings": { 
+    "MaxSpeedWalk": {speed_walk_max!float},
+    "MinSpeedWalk": {speed_walk_min!float}
+  },
+
+  "ChaoticPatrollingSettings": {
+    "MaxIteration": 3,
+    "MinIteration": 1,
+    "MaxTimeStay": 3,
+    "MinTimeStay": 1
+  },
+  "StraightPatrollingSettings": {
+    "MaxIteration": 3,
+    "MinIteration": 1,
+    "MaxTimeStay": 3,
+    "MinTimeStay": 1
+  },
+  "CowardlyStateSettings": {
+    "MaxSpeedWalk": {speed_walk_max!float},
+    "MinSpeedWalk": {speed_walk_min!float},
+    "MaxSpeedRun": {speed_run_max!float},
+    "MinSpeedRun": {speed_run_min!float}
+  },
+  "RectilinearCowardlyStateSettings": {
+    "DelayCaptured": {captured_delay!int},
+    "MaxSpeedRun": {speed_run_max!float},
+    "MinSpeedRun": {speed_run_min!float},
+    "Angle": {captured_angle!float},
+    "Range": {captured_range!float}
+  }
+}
+
+

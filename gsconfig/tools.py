@@ -127,7 +127,7 @@ def save_json(data, title, path=''):
         data = json.loads(data)
 
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
-        json.dump(data, file, indent=2, ensure_ascii=False)
+        json.dump(data, file, indent=4, ensure_ascii=False)
 
 def save_raw(data, title, path=''):
     with open(os.path.join(path, title), 'w') as file:

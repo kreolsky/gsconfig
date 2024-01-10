@@ -1,0 +1,34 @@
+{
+  "<Upgrades>k__BackingField": [
+    {
+      "Type": 0,
+      "Name": "Flight speed",
+      "Description": "Increases flight<br>speed",
+      "Upgrades": {ufo_speed}
+    },
+    {
+      "Type": 1,
+      "Name": "Gargo capacity",
+      "Description": "Increases cargo<br>capacity",
+      "Upgrades": {cargo}
+    },   
+    {
+      "Type": 2,
+      "Name": "Capture Speed",
+      "Description": "Increases capture<br>speed",
+      "Upgrades": {capture_speed}
+    },
+    {
+      "Type": 3,
+      "Name": "Capture radius",
+      "Description": "Increases capture<br>radius",
+      "Upgrades": {capture_radius}
+    },
+    {
+      "Type": 4,
+      "Name": "Tentacles count",
+      "Description": "Increases tentacles<br>count",
+      "Upgrades": {tentacles}
+    }
+  ]
+}
