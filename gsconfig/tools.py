@@ -17,7 +17,7 @@ def parser_json(page_data, **params):
 
     Понимает несколько схем компановки данных. Проверка по очереди:
     1. Используется схема данных. См. Page.scheme и Page.set_scheme()
-    2. Свободный формат, первая строка - ключи, все последуюшие - данные
+    2. Свободный формат, первая строка - ключи, все последуюшие - данные соответствующие этим ключам
 
     **params - все параметры доступные для парсера parser.jsonify
     """
@@ -31,7 +31,7 @@ def parser_json(page_data, **params):
     # Парсер конфигов из гуглодоки в JSON
     parser = gsparser.ConfigJSONConverter(params)
 
-    # Указана схема (scheme) хранения данных. Данные в несоклько колонок 
+    # Указана обычная схема (scheme) хранения данных. Данные в несоклько колонок 
     # sheme = {'key': 'key', 'data': ('value_1', 'value_2')}, где 
     # 'key' - название столбца с ключами 
     # 'data' - контеж названий столбцов с данными
@@ -39,8 +39,9 @@ def parser_json(page_data, **params):
         key = scheme.get('key', 'key')
         key_index = headers.index(key)
         data_indexes = [headers.index(x) for x in scheme['data']]
-        # Первый столбец проходит как дефолтный, 
-        # из него брать данные если в других столбцах пусто
+        
+        # Первый столбец проходит как дефолтный, из него буду взяты данные 
+        # когда в соответствующих строках других столбцов будет пусто
         default_data_index = data_indexes[0]
 
         out = {}
@@ -50,7 +51,7 @@ def parser_json(page_data, **params):
                 # Пропуск пустых строк
                 if not line[key_index]:
                     continue
-
+                
                 line_data = line[data_index]
                 # Если данные пустые, то брать из дефолтного столбца
                 if not line_data:
@@ -61,11 +62,11 @@ def parser_json(page_data, **params):
 
         return out
 
-    # Простая схема данных. Документ из двух колонок 
-    # sheme = ('key', 'data'), где 
+    # Простая схема данных. Документ из двух колонок sheme = ('key', 'data'), где 
     # 'key' - название столбца с ключами 
-    # 'data' - название столбца с данными
-    if isinstance(scheme, tuple) and scheme[0] in headers and scheme[-1] in headers:
+    # 'data' - название столбца с данными 
+    # Схема -- кортеж и все элементы схемы представлены в заголовке
+    if isinstance(scheme, tuple) and all(x in headers for x in scheme):
         key_index = headers.index(scheme[0])
         data_index = headers.index(scheme[-1])
 

@@ -197,7 +197,10 @@ class Template(object):
         
         # Преобразовать в JSON
         if self.jsonify:
-            out = json.loads(out)
+            try:
+                out = json.loads(out)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Error during JSON conversion: {str(e)}")
 
         return out
 
@@ -333,7 +336,7 @@ class Page(object):
         Когда формат не указан - возвращает сырые данные как двумерный массив.
 
         Понимает несколько схем компановки данных. Проверка по очереди:
-        1. Используется схема данных. См. self.scheme и set_scheme()
+        1. Используется схема данных. См. self.scheme и self.set_scheme()
         2. Свободный формат, первая строка - ключи, все последуюшие - данные
 
         **params - все параметры доступные для парсера parser.jsonify
