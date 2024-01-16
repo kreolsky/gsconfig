@@ -200,7 +200,7 @@ class Template(object):
             try:
                 out = json.loads(out)
             except json.JSONDecodeError as e:
-                raise ValueError(f"Error during JSON conversion: {str(e)}")
+                raise ValueError(f"\nError during jsonify in {self.title}\n{str(e)}\n{out}")
 
         return out
 
