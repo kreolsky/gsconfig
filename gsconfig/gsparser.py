@@ -146,7 +146,10 @@ class BlockParser:
             for condition, action in condition_mapping.items():
                 if condition(line):
                     result = action(line)
-                    if result is not None:
+                    # Иногда когда блок содержит только строку эквивалетную Null - результат будет пропущен
+                    # В таком случае надо проверять, что вернёт строка и если это тоже Null, 
+                    # значит значение было валидным и надо его сохранить
+                    if result is not None or self.parse_string(line[1:-1]) is None:
                         out.append(result)
                     break
             else:
