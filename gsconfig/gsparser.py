@@ -122,6 +122,7 @@ class BlockParser:
         # Команда всегда указана через 'sep_func'
         if unwrap_it and self.params['sep_func'] in key:
             key, command = key.split(self.params['sep_func'])
+
         out_dict[key] = self.command_handlers[command](result)
 
     def parse_string(self, line):
@@ -146,9 +147,10 @@ class BlockParser:
             for condition, action in condition_mapping.items():
                 if condition(line):
                     result = action(line)
-                    # Иногда когда блок содержит только строку эквивалетную Null - результат будет пропущен
+                    # Когда блок содержит только строку эквивалетную Null, 
+                    # то без дополнительной проверки содержимого результат будет пропущен.
                     # В таком случае надо проверять, что вернёт строка и если это тоже Null, 
-                    # значит значение было валидным и надо его сохранить
+                    # значит значение было валидным и надо его сохранить.
                     if result is not None or self.parse_string(line[1:-1]) is None:
                         out.append(result)
                     break
