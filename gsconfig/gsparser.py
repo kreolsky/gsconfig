@@ -100,10 +100,11 @@ class BlockParser:
         }
         # Синтаксический сахар для ключей конфига, 
         # альтернативный способ указать команду для парсера
-        # Ключ this_is_the_key[] будет идентичен this_is_the_key!_dlist
+        # Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
         self.short_commands = {
             '[]': 'dlist',
-            '{}': 'list'
+            '()': 'list',
+            '(!)': 'flist'
         }
 
     def parse_raw(self, line):
