@@ -91,18 +91,17 @@ def parse_string(s, to_num=True):
 class BlockParser:
     def __init__(self, params):
         self.params = params
-        self.dummy_command = 'dummy'
         self.command_handlers = {
-            self.dummy_command: lambda x: x,
-            'list': lambda x: [x] if type(x) not in (list, tuple,) else x,
+            'list': lambda x: [x] if type(x) not in (list, tuple, ) else x,
             'dlist': lambda x: [x] if type(x) in (dict, ) else x,
             'flist': lambda x: [x]
         }
-        # Синтаксический сахар для ключей конфига, 
-        # альтернативный способ указать команду для парсера
+        # Синтаксический сахар для ключей конфига, альтернативный способ указать команду для парсера.
         # Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
+        # Использование '[]' для всех ключей v2 будет эквивалентно использованию converter v1, 
+        # Позволяет более гибко искючать словари которые не нуждаются в заворачивании 
         self.short_commands = {
-            '[]': 'dlist',
+            '[]': 'dlist',  
             '()': 'list',
             '(!)': 'flist'
         }
@@ -123,25 +122,33 @@ class BlockParser:
         # Всегда разворачиваем для версии v2
         # Потом проверяем какие команды необходимо применить
         unwrap_it = self.params.get('parser_version') == 'v2'
-        # Пустышка по умолчанию, не делать ничего
-        command = self.dummy_command
+        
+        # По умолчанием ключ идет без дополнительных команд
+        command = None
 
         key, substring = split_string_by_sep(line, self.params['sep_dict'], **self.params)
         result = converter.jsonify(substring, _unwrap_it=unwrap_it)
 
-        # Обработка коротких команд. Проверям каждый ключ на наличие коротких команд
-        # Если найдена, определяем команду и отрезаем от ключа короткую команду
-        for item in self.short_commands.keys():
-            if key.endswith(item):
-                command = self.short_commands[item]
-                key = key.rstrip(item)
-                break
+        # Обработка команд. Только для v2
+        if self.params.get('parser_version') == 'v2':
+            # Команда всегда указана через 'sep_func'
+            if self.params['sep_func'] in key:
+                key, command = key.split(self.params['sep_func'])
 
-        # Команда всегда указана через 'sep_func'
-        if unwrap_it and self.params['sep_func'] in key:
-            key, command = key.split(self.params['sep_func'])
+            # Обработка коротких команд. Проверям каждый ключ на наличие коротких команд
+            # Если найдена, определяем команду и отрезаем от ключа короткую команду
+            for item in self.short_commands.keys():
+                if key.endswith(item):
+                    command = self.short_commands[item]
+                    key = key.rstrip(item)
+                    break
 
-        out_dict[key] = self.command_handlers[command](result)
+        if command is None:
+            # Нет команды - нет обработки
+            out_dict[key] = result
+        else:
+            # Обработка дополнительной команды ключа
+            out_dict[key] = self.command_handlers[command](result)
 
     def parse_string(self, line):
         return parse_string(line, self.params['to_num'])
@@ -167,7 +174,7 @@ class BlockParser:
                     result = action(line)
                     # Когда блок содержит только строку эквивалетную Null, то result вернет Null.
                     # Без дополнительной проверки содержимого он будет пропущен.
-                    # В таком случае надо проверять, что вернёт строка и если это тоже Null, 
+                    # В таком случае надо проверять какие данные вернёт строка и если это тоже Null, 
                     # значит значение было валидным и надо его сохранить.
                     if result is not None or self.parse_string(line[1:-1]) is None:
                         out.append(result)
@@ -270,6 +277,17 @@ class ConfigJSONConverter:
     * list - заворачивает содержимое в список только если это не список
     * flist - всегда заворачивает в дополнительный список, даже списки!
     * dlist - заворачивает только если внутри словарь (dict)
+
+    #### Короткие команды
+
+    Синтаксический сахар для ключей конфига, альтернативный способ указать команду для парсера.
+    * [] - dlist
+    * () - list
+    * (!) - flist
+
+    Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
+    Использование '[]' для всех ключей v2 будет эквивалентно использованию converter v1, 
+    Позволяет более гибко искючать словари которые не нуждаются в заворачивании.
 
     ### _unwrap_it
     **ВАЖНО!** Служебный параметр, указание нужно ли разворачивать получившуюся после парсинга структуру. Определяется автоматически.
