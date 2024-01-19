@@ -91,10 +91,19 @@ def parse_string(s, to_num=True):
 class BlockParser:
     def __init__(self, params):
         self.params = params
+        self.dummy_command = 'dummy'
         self.command_handlers = {
-            'dummy': lambda x: x,
+            self.dummy_command: lambda x: x,
             'list': lambda x: [x] if type(x) not in (list, tuple,) else x,
+            'dlist': lambda x: [x] if type(x) in (dict, ) else x,
             'flist': lambda x: [x]
+        }
+        # Синтаксический сахар для ключей конфига, 
+        # альтернативный способ указать команду для парсера
+        # Ключ this_is_the_key[] будет идентичен this_is_the_key!_dlist
+        self.short_commands = {
+            '[]': 'dlist',
+            '{}': 'list'
         }
 
     def parse_raw(self, line):
@@ -114,10 +123,18 @@ class BlockParser:
         # Потом проверяем какие команды необходимо применить
         unwrap_it = self.params.get('parser_version') == 'v2'
         # Пустышка по умолчанию, не делать ничего
-        command = 'dummy'
+        command = self.dummy_command
 
         key, substring = split_string_by_sep(line, self.params['sep_dict'], **self.params)
         result = converter.jsonify(substring, _unwrap_it=unwrap_it)
+
+        # Обработка коротких команд. Проверям каждый ключ на наличие коротких команд
+        # Если найдена, определяем команду и отрезаем от ключа короткую команду
+        for item in self.short_commands.keys():
+            if key.endswith(item):
+                command = self.short_commands[item]
+                key = key.rstrip(item)
+                break
 
         # Команда всегда указана через 'sep_func'
         if unwrap_it and self.params['sep_func'] in key:
@@ -251,6 +268,7 @@ class ConfigJSONConverter:
 
     * list - заворачивает содержимое в список только если это не список
     * flist - всегда заворачивает в дополнительный список, даже списки!
+    * dlist - заворачивает только если внутри словарь (dict)
 
     ### _unwrap_it
     **ВАЖНО!** Служебный параметр, указание нужно ли разворачивать получившуюся после парсинга структуру. Определяется автоматически.
