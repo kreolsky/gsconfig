@@ -62,6 +62,38 @@ def split_string_by_sep(string, sep, **params):
         yield string[prev:i].strip(sep).strip()
         prev = i
 
+def block_splitter(text, **params):
+
+    br_block = params.get('br_block')
+    br_list = params.get('br_list')
+    raw_pattern = params.get('raw_pattern')
+
+    br = {
+        br_block[0]: 1,
+        br_block[1]: -1,
+        br_list[0]: 1,
+        br_list[1]: -1
+    }
+
+    is_not_raw_block = True
+
+    depth = 0
+    start = 0
+    characters = 0
+
+    for i, char in enumerate(text):
+        if (delta := br.get(char)) is not None:
+            depth += delta
+        elif depth == 0:
+            characters += 1
+
+        if (char == "|" and depth == 0) or (characters == 0 and depth == 0) or i == len(text) - 1:
+            block = text[start:i + 1].strip().strip(params['sep_block']).strip(params['sep_base']).strip()
+            if not block:
+                continue
+            yield block
+            start = i + 1
+
 def parse_string(s, to_num=True):
     """
     Пытается перевести строку в число, предварительно определив что это было, int или float
@@ -106,35 +138,24 @@ class BlockParser:
             '(!)': 'flist'
         }
 
-    def parse_raw(self, line):
-        return line[1:-1]
-
-    def parse_nested_block(self, line, converter):
-        return converter.jsonify(line[1:-1], _unwrap_it=True)
-
-    def parse_dict(self, line, out_dict, converter):
+    def parse_dict(self, line, converter):
         """
         line - фрагмент строки для разбора
         out_dict - итоговый словарь
         converter - обьект ConfigJSONConverter
         """
 
-        # Всегда разворачиваем для версии v2
-        # Потом проверяем какие команды необходимо применить
-        unwrap_it = self.params.get('parser_version') == 'v2'
-        
         # По умолчанием ключ идет без дополнительных команд
         command = None
 
         key, substring = split_string_by_sep(line, self.params['sep_dict'], **self.params)
-        result = converter.jsonify(substring, _unwrap_it=unwrap_it)
+        result = converter.jsonify(substring)
 
         # Обработка команд. Только для v2
         if self.params.get('parser_version') == 'v2':
             # Команда всегда указана через 'sep_func'
             if self.params['sep_func'] in key:
                 key, command = key.split(self.params['sep_func'])
-
             # Обработка коротких команд. Проверям каждый ключ на наличие коротких команд
             # Если найдена, определяем команду и отрезаем от ключа короткую команду
             for item in self.short_commands.keys():
@@ -143,12 +164,14 @@ class BlockParser:
                     key = key.rstrip(item)
                     break
 
-        if command is None:
-            # Нет команды - нет обработки
-            out_dict[key] = result
-        else:
-            # Обработка дополнительной команды ключа
-            out_dict[key] = self.command_handlers[command](result)
+        # Для v1 словари всегда завернуты в список!
+        elif self.params.get('parser_version') == 'v1':
+            command = 'dlist'
+
+        if command:
+            result = self.command_handlers[command](result)
+        
+        return {key: result}
 
     def parse_string(self, line):
         return parse_string(line, self.params['to_num'])
@@ -163,28 +186,26 @@ class BlockParser:
         out_dict = {}
 
         condition_mapping = {
-            lambda line: line.startswith(self.params['raw_pattern']): self.parse_raw,
-            lambda line: line.startswith(self.params['br_block'][0]): lambda x: self.parse_nested_block(x, converter),
-            lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, out_dict, converter),
+            lambda line: line.startswith(self.params['raw_pattern']): lambda x: x[1:-1],
+            lambda line: line.startswith(self.params['br_block'][0]): lambda x: converter.jsonify(x[1:-1]),
+            lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, converter),
         }
 
         for line in split_string_by_sep(string, self.params['sep_base'], **self.params):
             for condition, action in condition_mapping.items():
                 if condition(line):
-                    result = action(line)
-                    # Когда блок содержит только строку эквивалетную Null, то result вернет Null.
-                    # Без дополнительной проверки содержимого он будет пропущен.
-                    # В таком случае надо проверять какие данные вернёт строка и если это тоже Null, 
-                    # значит значение было валидным и надо его сохранить.
-                    if result is not None or self.parse_string(line[1:-1]) is None:
-                        out.append(result)
+                    r = action(line)
+                    if isinstance(r, dict):
+                        out_dict.update(r)
+                    else:
+                        out.append(r)
                     break
             else:
                 out.append(self.parse_string(line))
-
+        
         if out_dict:
             out.append(out_dict)
-
+        
         return out[0] if len(out) == 1 else out
 
 class ConfigJSONConverter:
@@ -288,9 +309,6 @@ class ConfigJSONConverter:
     Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
     Использование '[]' для всех ключей v2 будет эквивалентно использованию converter v1, 
     Позволяет более гибко искючать словари которые не нуждаются в заворачивании.
-
-    ### _unwrap_it
-    **ВАЖНО!** Служебный параметр, указание нужно ли разворачивать получившуюся после парсинга структуру. Определяется автоматически.
 
     ### always_unwrap
     Нужно ли вытаскивать словари из списков единичной длины.
@@ -406,52 +424,34 @@ class ConfigJSONConverter:
         self.params = {**self.default_params, **(params or {})}
         self.parser = BlockParser(self.params)
 
-    def jsonify(self, string: str, is_raw: bool = None, _unwrap_it: bool = None) -> dict:
+    def jsonify(self, string: str, is_raw: bool = None) -> dict:
         """
         Метод переводящий строку конфига в JSON
         - string -- исходная строка для конвертации
-        - is_raw -- в случае True, то строка не будет конвертироваться и возвращается как есть. Когда is_raw не задано, берем значение из настроект обьекта
-        - _unwrap_it -- служебная команда. Указывает когда необходимо разворачивать получившиеся списки
+        - is_raw -- в случае True строка не будет конвертироваться и возвращается как есть. Когда is_raw не задано, берем значение из настроект обьекта
         """
 
         # Берем из настроек обьекта если не указано
         if is_raw is None:
             is_raw = self.params['is_raw']
 
-        # Для сырых строк возвращаем без изменений
-        # Необходимо когда мешанина из разных типов строк
-        # Пожалуй, это плохое решение
+        # Вернуть сырые строки как есть
         if is_raw:
             return string
 
-        string = str(string)
-
-        # Да, всегда True. Была идея что для разных версий могут быть разные условия
-        if _unwrap_it is None:
-            _unwrap_it = {'v1': True, 'v2': True}[self.params['parser_version']]
+        # Иногда на вход могут прилететь цифры (int, float, ...)
+        string = str(string).strip()
 
         out = []
-        for line in split_string_by_sep(string, self.params['sep_block'], **self.params):
-            out.append(self.parser.parse_block(line, self))
 
-        """
-        Проверяем что нужно разворачивать в зависимости от того, какие
-        элементы структуры разбираем. Значения внутри словарей зависит от режима и версии
+        # Оределяем блоки и уже блоки передаем в разработку. 
+        # Блок начинается либо со скобки определяющей блок br_block тогда блоки отделяются sep_base
+        # Либо наличием символа блока sep_block
+        # separator = self.params['sep_block']
+        # if string.startswith(self.params['br_block'][0]):
+        #     separator = self.params['sep_base']
 
-        v1. Всё, кроме словарей, разворачиваем по умолчанию
-        v2. Всегда разворачиваем. Дополнительные действия зависят от команды в ключе
-        См. parser.parse_block() для деталей
-        """
-        unwrap_v1 = self.params['parser_version'] == 'v1' and (type(out[0]) not in (dict, ) or _unwrap_it)
-        unwrap_v2 = self.params['parser_version'] == 'v2' and _unwrap_it
-        if len(out) == 1 and (self.params['always_unwrap'] or unwrap_v1 or unwrap_v2):
-            return out[0]
+        for i, block in enumerate(block_splitter(string, **self.params)):
+            out.append(self.parser.parse_block(block, self))
 
-        """
-        КОСТЫЛЬ! Последствия того, что перед парсингом в gsconfig всё заворачивается
-        в скобки блока и на выход попадают массивы с пустой строкой - [""]
-        """
-        if isinstance(out, list) and out[0] == '':
-            return []
-
-        return out
+        return out[0] if len(out) == 1 else out
