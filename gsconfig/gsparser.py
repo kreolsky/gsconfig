@@ -1,5 +1,28 @@
 import ast
 
+
+def get_all_brackets(**params):
+    brackets = {}
+    for key, value in params.items():
+        # Все скобки лежат в параметрах начинающихся с br_
+        if key.startswith('br_'):
+            brackets[value[0]] = 1
+            brackets[value[-1]] = -1
+    return brackets
+
+def get_all_separators(**params):
+    separators = [' ', ]
+    for key, value in params.items():
+        # Все скобки лежат в параметрах начинающихся с sep_
+        if key.startswith('sep_'):
+            separators.append(value)
+    return separators
+
+def trim_all_separators(string, separators):
+    for sep in separators:
+        string = string.strip(sep)
+    return string.strip()
+
 def define_split_points(string, sep, **params):
     """
     Define the positions of all separator characters in the string.
@@ -17,18 +40,8 @@ def define_split_points(string, sep, **params):
         int: Indices of separator characters.
     """
 
-    br_block = params.get('br_block')
-    br_list = params.get('br_list')
     raw_pattern = params.get('raw_pattern')
-
-    # Brackets are grouped by types.
-    # All opening brackets increase the counter, closing brackets decrease it
-    br = {
-        br_block[0]: 1,
-        br_block[1]: -1,
-        br_list[0]: 1,
-        br_list[1]: -1
-    }
+    br = get_all_brackets(**params)
 
     is_not_raw_block = True
     count = 0
@@ -52,7 +65,6 @@ def split_string_by_sep(string, sep, **params):
 
     string - исходная строка для разбора
     sep - разделитель. Пример: sep = '|'
-    br - тип скобок выделяющих подблоки. Пример: br = '{}'
 
     Генератор. Возвращает подстроки.
     """
@@ -64,21 +76,11 @@ def split_string_by_sep(string, sep, **params):
 
 def block_splitter(text, **params):
 
-    br_block = params.get('br_block')
-    br_list = params.get('br_list')
     raw_pattern = params.get('raw_pattern')
-
-    # text = text.replace(" ", "")
-
-    br = {
-        br_block[0]: 1,
-        br_block[1]: -1,
-        br_list[0]: 1,
-        br_list[1]: -1
-    }
+    br = get_all_brackets(**params)
+    separators = get_all_separators(**params)
 
     is_not_raw_block = True
-
     depth = 0
     start = 0
     characters = 0
@@ -87,16 +89,19 @@ def block_splitter(text, **params):
         if char == raw_pattern:
             is_not_raw_block = not is_not_raw_block
         
-        if (delta := br.get(char)) is not None:
+        elif (delta := br.get(char)) is not None:
             depth += delta
 
-        elif char not in (',', '|', ' ') and depth == 0:
+        elif char not in separators and depth == 0:
             characters += 1
 
-        # Тут, по идее, мы дошли до конца блока!
-        if ((char == "|" and depth == 0) or (characters == 0 and depth == 0) or i == len(text) - 1) and is_not_raw_block:
-            characters = 0
-            block = text[start:i + 1].strip().strip('|').strip(',').strip()
+        # Тут перечислены все условия конца блока
+        end_block_by_sep = char == "|" and depth == 0
+        end_block_by_br = characters == 0 and depth == 0
+        string_end = i == len(text) - 1
+        if (end_block_by_sep or end_block_by_br or string_end) and is_not_raw_block:
+            block = trim_all_separators(text[start:i + 1], separators)
+            # block = text[start:i + 1].strip().strip('|').strip(',').strip()
             if not block:
                 continue
             yield block
