@@ -68,6 +68,8 @@ def block_splitter(text, **params):
     br_list = params.get('br_list')
     raw_pattern = params.get('raw_pattern')
 
+    # text = text.replace(" ", "")
+
     br = {
         br_block[0]: 1,
         br_block[1]: -1,
@@ -82,13 +84,19 @@ def block_splitter(text, **params):
     characters = 0
 
     for i, char in enumerate(text):
+        if char == raw_pattern:
+            is_not_raw_block = not is_not_raw_block
+        
         if (delta := br.get(char)) is not None:
             depth += delta
-        elif depth == 0:
+
+        elif char not in (',', '|', ' ') and depth == 0:
             characters += 1
 
-        if (char == "|" and depth == 0) or (characters == 0 and depth == 0) or i == len(text) - 1:
-            block = text[start:i + 1].strip().strip(params['sep_block']).strip(params['sep_base']).strip()
+        # Тут, по идее, мы дошли до конца блока!
+        if ((char == "|" and depth == 0) or (characters == 0 and depth == 0) or i == len(text) - 1) and is_not_raw_block:
+            characters = 0
+            block = text[start:i + 1].strip().strip('|').strip(',').strip()
             if not block:
                 continue
             yield block
@@ -451,7 +459,14 @@ class ConfigJSONConverter:
         # if string.startswith(self.params['br_block'][0]):
         #     separator = self.params['sep_base']
 
-        for i, block in enumerate(block_splitter(string, **self.params)):
+        for block in block_splitter(string, **self.params):
             out.append(self.parser.parse_block(block, self))
+                       
+        # """
+        # КОСТЫЛЬ! Последствия того, что перед парсингом в gsconfig всё заворачивается
+        # в скобки блока и на выход попадают массивы с пустой строкой - [""]
+        # """
+        if not out:
+            return ''
 
         return out[0] if len(out) == 1 else out
