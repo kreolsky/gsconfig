@@ -2,6 +2,11 @@ import ast
 
 
 def get_all_brackets(**params):
+    """
+    Возвращает все используемые в конверторе типы скобок.
+    params - параметры с настройками класса конвертора
+    """
+
     brackets = {}
     for key, value in params.items():
         # Все скобки лежат в параметрах начинающихся с br_
@@ -11,29 +16,32 @@ def get_all_brackets(**params):
     return brackets
 
 def get_all_separators(**params):
+    """
+    Возвращает все возможные разделители блоков.
+    params - параметры с настройками класса конвертора
+    """
+
     separators = [' ', params['sep_block'], params['sep_base']]
     return separators
 
 def strip_all_separators(string, separators):
+    """
+    Отрезает от строки все символы разделителей
+    """
+
     for sep in separators:
         string = string.strip(sep)
     return string.strip()
 
 def define_split_points(string, sep, **params):
     """
-    Define the positions of all separator characters in the string.
-    Ignores separators inside blocks enclosed by brackets.
+    Определяет точки в которых необходимо разрезать строку.
 
-    Args:
-        string (str): The original string to be parsed.
-        sep (str): The separator. Example: sep = '|'
-        params (dict): Additional parameters, including:
-            - br_block (str): Brackets for highlighting sub-blocks. Example: br_block = '{}'
-            - br_list (str): Brackets for highlighting lists. Example: br_list = '[]'
-            - raw_pattern (str): Raw pattern to avoid parsing. Example: raw_pattern = '!'
-
-    Yields:
-        int: Indices of separator characters.
+    string - исходная строка для разбора
+    sep - разделитель. Пример: sep = '|'
+    params - параметры с настройками класса конвертора
+    
+    Генератор. Возвращает порядковые номера символов.
     """
 
     raw_pattern = params.get('raw_pattern')
@@ -56,11 +64,12 @@ def define_split_points(string, sep, **params):
 
 def split_string_by_sep(string, sep, **params):
     """
-    Разделение строки на массив подстрок по символу разделителю.
+    Разделение строки на массив подстрок по символу разделителю. 
     Не разделяет блоки выделенные скобками.
 
     string - исходная строка для разбора
     sep - разделитель. Пример: sep = '|'
+    params - параметры с настройками класса конвертора
 
     Генератор. Возвращает подстроки.
     """
@@ -72,10 +81,14 @@ def split_string_by_sep(string, sep, **params):
 
 def block_splitter(string, **params):
     """
-    Разрезает строка по блокам. Конец блока определяется по:
+    Разрезает строку по блокам. Конец блока определяется по:
      - спец. символу окончания блока 
      - изолироваванный самостоятельный блок выделенный {}
+
+    string - исходная строка для разбора
+    params - параметры с настройками класса конвертора
     """
+
     raw_pattern = params.get('raw_pattern')
     br = get_all_brackets(**params)
     separators = get_all_separators(**params)
@@ -83,7 +96,7 @@ def block_splitter(string, **params):
     is_not_raw_block = True
     is_isolated_block = True
     br_level = 0  # Глубина вложенности
-    start = 0  # Начало блока
+    block_start = 0  # Начало блока
 
     for i, char in enumerate(string):
         if char == raw_pattern:
@@ -106,12 +119,12 @@ def block_splitter(string, **params):
 
         # Отправляем найденный блок и разбираем строку дальше
         if (end_block_by_sep or end_isolated_block or string_end) and is_not_raw_block:
-            block = strip_all_separators(string[start:i + 1], separators)
+            block = strip_all_separators(string[block_start:i + 1], separators)
             # Пробелы в разбираемой строке могут создавать пустые блоки
             if not block:
                 continue
             yield block
-            start = i + 1
+            block_start = i + 1
 
 def parse_string(s, to_num=True):
     """
@@ -426,7 +439,7 @@ class ConfigJSONConverter:
         - is_raw -- в случае True строка не будет конвертироваться и возвращается как есть. Когда is_raw не задано, берем значение из настроект обьекта
         """
 
-        # Вернуть сырые строки как есть
+        # Вернуть сырые строки как есть без конвертации
         if is_raw or self.params['is_raw']:
             return string
 
