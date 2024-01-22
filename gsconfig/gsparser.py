@@ -11,14 +11,10 @@ def get_all_brackets(**params):
     return brackets
 
 def get_all_separators(**params):
-    separators = [' ', ]
-    for key, value in params.items():
-        # Все скобки лежат в параметрах начинающихся с sep_
-        if key.startswith('sep_'):
-            separators.append(value)
+    separators = [' ', params['sep_block'], params['sep_base']]
     return separators
 
-def trim_all_separators(string, separators):
+def strip_all_separators(string, separators):
     for sep in separators:
         string = string.strip(sep)
     return string.strip()
@@ -44,16 +40,16 @@ def define_split_points(string, sep, **params):
     br = get_all_brackets(**params)
 
     is_not_raw_block = True
-    count = 0
+    br_level = 0
 
     for i, letter in enumerate(string):
         if letter == raw_pattern:
             is_not_raw_block = not is_not_raw_block
 
         elif (delta := br.get(letter)) is not None:
-            count += delta
+            br_level += delta
 
-        elif letter == sep and count == 0 and is_not_raw_block:
+        elif letter == sep and br_level == 0 and is_not_raw_block:
             yield i
 
     yield len(string)
@@ -74,34 +70,44 @@ def split_string_by_sep(string, sep, **params):
         yield string[prev:i].strip(sep).strip()
         prev = i
 
-def block_splitter(text, **params):
-
+def block_splitter(string, **params):
+    """
+    Разрезает строка по блокам. Конец блока определяется по:
+     - спец. символу окончания блока 
+     - изолироваванный самостоятельный блок выделенный {}
+    """
     raw_pattern = params.get('raw_pattern')
     br = get_all_brackets(**params)
     separators = get_all_separators(**params)
 
     is_not_raw_block = True
-    depth = 0
-    start = 0
-    characters = 0
+    is_isolated_block = True
+    br_level = 0  # Глубина вложенности
+    start = 0  # Начало блока
 
-    for i, char in enumerate(text):
+    for i, char in enumerate(string):
         if char == raw_pattern:
             is_not_raw_block = not is_not_raw_block
         
+        # Считаем глубину вложенности по скобкам
         elif (delta := br.get(char)) is not None:
-            depth += delta
+            br_level += delta
 
-        elif char not in separators and depth == 0:
-            characters += 1
+        # Когда перед блоком что-то есть, то он не самостоятельный и отрезать его ничего не нужно
+        elif char not in separators and br_level == 0:
+            is_isolated_block = False
 
-        # Тут перечислены все условия конца блока
-        end_block_by_sep = char == "|" and depth == 0
-        end_block_by_br = characters == 0 and depth == 0
-        string_end = i == len(text) - 1
-        if (end_block_by_sep or end_block_by_br or string_end) and is_not_raw_block:
-            block = trim_all_separators(text[start:i + 1], separators)
-            # block = text[start:i + 1].strip().strip('|').strip(',').strip()
+        # Нашли символ конец блока (sep_block) и он не внутри других блоков
+        end_block_by_sep = char == params['sep_block'] and br_level == 0
+        # Блок закончился и он был самостоятельный
+        end_isolated_block = is_isolated_block and br_level == 0
+        # Конец строки
+        string_end = i == len(string) - 1
+
+        # Отправляем найденный блок и разбираем строку дальше
+        if (end_block_by_sep or end_isolated_block or string_end) and is_not_raw_block:
+            block = strip_all_separators(string[start:i + 1], separators)
+            # Пробелы в разбираемой строке могут создавать пустые блоки
             if not block:
                 continue
             yield block
@@ -243,7 +249,6 @@ class ConfigJSONConverter:
         'sep_dict': '=',
         'raw_pattern': '"',
         'to_num': True,
-        'always_unwrap': False,
         'parser_version': 'v1',
         'is_raw': False
     }
@@ -323,28 +328,6 @@ class ConfigJSONConverter:
     Использование '[]' для всех ключей v2 будет эквивалентно использованию converter v1, 
     Позволяет более гибко искючать словари которые не нуждаются в заворачивании.
 
-    ### always_unwrap
-    Нужно ли вытаскивать словари из списков единичной длины.
-
-    False (по умолчанию) - вытаскивает из списков все объекты КРОМЕ словарей.
-
-    True - вынимает из список ВСЕ типы объектов, включая словари. **ВАЖНО!** Настройка игнорирует команды mode = v2, если список можно развернуть, то он обязательно будет развернут!
-
-    Строка: ```'one!list = two, item = {count = 4.5, price = 100, name!list = {name1 = name}}'```
-
-    Результат:
-    ```
-    {
-        "one": "two",
-        "item": {
-            "count": 4.5,
-            "price": 100,
-            "name": {
-                "name1": "my_name"
-            }
-        }
-    }
-    ```
     ### br_block
     Тип скобок выделяющих подблоки. '{}' по умолчанию.
 
@@ -430,47 +413,34 @@ class ConfigJSONConverter:
             'sep_dict': '=',
             'raw_pattern': '"',
             'to_num': True,
-            'always_unwrap': False,
             'parser_version': 'v1',
             'is_raw': False
         }
         self.params = {**self.default_params, **(params or {})}
         self.parser = BlockParser(self.params)
 
-    def jsonify(self, string: str, is_raw: bool = None) -> dict:
+    def jsonify(self, string: str, is_raw: bool = False) -> dict:
         """
         Метод переводящий строку конфига в JSON
         - string -- исходная строка для конвертации
         - is_raw -- в случае True строка не будет конвертироваться и возвращается как есть. Когда is_raw не задано, берем значение из настроект обьекта
         """
 
-        # Берем из настроек обьекта если не указано
-        if is_raw is None:
-            is_raw = self.params['is_raw']
-
         # Вернуть сырые строки как есть
-        if is_raw:
+        if is_raw or self.params['is_raw']:
             return string
 
         # Иногда на вход могут прилететь цифры (int, float, ...)
         string = str(string).strip()
-
         out = []
 
-        # Оределяем блоки и уже блоки передаем в разработку. 
-        # Блок начинается либо со скобки определяющей блок br_block тогда блоки отделяются sep_base
-        # Либо наличием символа блока sep_block
-        # separator = self.params['sep_block']
-        # if string.startswith(self.params['br_block'][0]):
-        #     separator = self.params['sep_base']
-
+        # Оределяем блоки и уже блоки передаем в разборку
+        # Блок либо выделен br_block тогда блоки отделяются sep_base
+        # Либо определяется наличием символа блока sep_block
         for block in block_splitter(string, **self.params):
             out.append(self.parser.parse_block(block, self))
                        
-        # """
-        # КОСТЫЛЬ! Последствия того, что перед парсингом в gsconfig всё заворачивается
-        # в скобки блока и на выход попадают массивы с пустой строкой - [""]
-        # """
+        # Ничего не добавили, нечего и возвращать
         if not out:
             return ''
 
