@@ -218,7 +218,7 @@ class Page(object):
         self.is_raw = False  # По умолчанию всегда будет парсить данные при сохранении в json 
         self._cache = None
         self._name_and_format = None
-        self._parsers = {
+        self._extractors = {
             'raw': tools.parser_dummy,
             'csv': tools.parser_dummy,
             'json': tools.parser_json
@@ -263,7 +263,7 @@ class Page(object):
     def _calculate_name_and_format(self):
         name = self.title
         format = 'raw'
-        for parser_key in self._parsers.keys():
+        for parser_key in self._extractors.keys():
             if name.endswith(f'.{parser_key}'):
                 name = name[:-len(parser_key) - 1]
                 format = parser_key
@@ -348,9 +348,9 @@ class Page(object):
         params['is_raw'] = self.is_raw
         params['scheme'] = self.scheme
         params['key_skip_letters'] = self.key_skip_letters
-        params['parser_version'] = self.parser_version
+        params['parser_version'] = self.parser_version  # gsparser version (v1, v2)
         
-        return self._parsers[self.format](self._cache, **params)
+        return self._extractors[self.format](self._cache, **params)
     
     def save(self, path=''):
         """
