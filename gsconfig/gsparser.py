@@ -445,8 +445,8 @@ class ConfigJSONConverter:
 
         # Иногда на вход могут прилететь цифры (int, float, ...)
         string = str(string).strip()
-        out = []
 
+        out = []
         # Оределяем блоки и уже блоки передаем в разборку
         # Блок либо выделен br_block тогда блоки отделяются sep_base
         # Либо определяется наличием символа блока sep_block
@@ -457,4 +457,5 @@ class ConfigJSONConverter:
         if not out:
             return ''
 
+        # Иначе каждый блок будет завернуть в лишний список
         return out[0] if len(out) == 1 else out
