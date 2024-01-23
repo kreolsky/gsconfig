@@ -6,10 +6,10 @@ import ast
 from . import gsconfig
 from . import gsparser
 
-def parser_dummy(page_data, **params):
+def extractor_dummy(page_data, **params):
     return page_data
 
-def parser_json(page_data, **params):
+def extractor_json(page_data, **params):
     """
     Парсит данные из гуглодоки в формат JSON. См. parser.jsonify
     

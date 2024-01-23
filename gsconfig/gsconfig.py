@@ -219,9 +219,9 @@ class Page(object):
         self._cache = None
         self._name_and_format = None
         self._extractors = {
-            'raw': tools.parser_dummy,
-            'csv': tools.parser_dummy,
-            'json': tools.parser_json
+            'raw': tools.extractor_dummy,
+            'csv': tools.extractor_dummy,
+            'json': tools.extractor_json
         }
 
     @property
