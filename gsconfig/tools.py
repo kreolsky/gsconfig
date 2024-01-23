@@ -111,26 +111,41 @@ def save_page(page, path=''):
     save_func = save_page_functions.get(page.format, save_raw)
     return save_func(page.get(), page.name, path)
 
-def save_csv(data, title, path=''):
-    if not title.endswith('.csv'):
-        title = f'{title}.csv'
+def check_folder_exists(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
 
+def convert_to_dict(data):
+    if isinstance(data, str):
+        return json.loads(data)
+    else:
+        return data
+
+def add_extension(filename, extension):
+    if not filename.lower().endswith(f'.{extension}'):
+        return f'{filename}.{extension}'
+    else:
+        return filename
+
+def save_csv(data, title, path=''):
+    title = add_extension(title, 'csv')
+
+    check_folder_exists(path)
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         for line in data:
             writer = csv.writer(file, quoting=csv.QUOTE_ALL)
             writer.writerow(line)
 
 def save_json(data, title, path=''):
-    if not title.endswith('.json'):
-        title = f'{title}.json'
+    title = add_extension(title, 'json')
+    data = convert_to_dict(data)
     
-    if isinstance(data, str):
-        data = json.loads(data)
-
+    check_folder_exists(path)
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
 
 def save_raw(data, title, path=''):
+    check_folder_exists(path)
     with open(os.path.join(path, title), 'w') as file:
         file.write(data)
 
