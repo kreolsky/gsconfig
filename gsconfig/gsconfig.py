@@ -216,6 +216,7 @@ class Page(object):
         self.parser_version = None
         self.scheme = ('key', 'data')  # Схема хранение данных в двух столбцах
         self.is_raw = False  # По умолчанию всегда будет парсить данные при сохранении в json 
+        self._format = None
         self._cache = None
         self._name_and_format = None
         self._extractors = {
@@ -256,8 +257,12 @@ class Page(object):
         - raw - Воззвращает двумерный массив. НЕ парсит данные!
         """
 
+        if self._format:
+            return self._format
+
         if not self._name_and_format:
             self._calculate_name_and_format()
+
         return self._name_and_format["format"]
 
     def _calculate_name_and_format(self):
@@ -322,6 +327,13 @@ class Page(object):
             raise ValueError(f'The scheme should be tuple or dict!')
 
         self.scheme = scheme
+
+    def set_as_json(self):
+        """
+        Принудительно включает использует формат JSON.
+        """
+
+        self._format = 'json'
 
     def set_raw_mode(self):
         """
