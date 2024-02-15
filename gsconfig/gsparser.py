@@ -173,7 +173,6 @@ class BlockParser:
     def parse_dict(self, line, converter):
         """
         line - фрагмент строки для разбора
-        out_dict - итоговый словарь
         converter - обьект ConfigJSONConverter
         """
 
@@ -218,8 +217,11 @@ class BlockParser:
         out_dict = {}
 
         condition_mapping = {
+            # Сырая строка (Начинется с символа определения сырой строки)
             lambda line: line.startswith(self.params['raw_pattern']): lambda x: x[1:-1],
+            # Начало блока (Начинается с открывающей скобки)
             lambda line: line.startswith(self.params['br_block'][0]): lambda x: converter.jsonify(x[1:-1]),
+            # Словарь (Внутри блока есть символ разделения словаря)
             lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, converter),
         }
 
@@ -448,7 +450,7 @@ class ConfigJSONConverter:
 
         out = []
         # Оределяем блоки и уже блоки передаем в разборку
-        # Блок либо выделен br_block тогда блоки отделяются sep_base
+        # Блок бывает либо выделен br_block и разделяются sep_base
         # Либо определяется наличием символа блока sep_block
         for block in block_splitter(string, **self.params):
             out.append(self.parser.parse_block(block, self))

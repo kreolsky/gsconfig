@@ -328,12 +328,16 @@ class Page(object):
 
         self.scheme = scheme
 
-    def set_as_json(self):
+    def set_format(self, format='json'):
         """
-        Принудительно включает использует формат JSON.
+        Принудительно задать формат для страницы. JSON по умолчанию
         """
 
-        self._format = 'json'
+        available_formats = list(self._extractors.keys())
+        if format not in available_formats:
+            raise ValueError(f'Available formats are {available_formats}')
+
+        self._format = format
 
     def set_raw_mode(self):
         """
