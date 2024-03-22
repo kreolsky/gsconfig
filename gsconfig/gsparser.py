@@ -93,7 +93,6 @@ class BlockParser:
             'list': lambda x: [x] if type(x) not in (list, tuple, ) else x,
             'dlist': lambda x: [x] if type(x) in (dict, ) else x,
             'flist': lambda x: [x],
-            'dummy': lambda x: x
         }
         # Синтаксический сахар для ключей конфига, альтернативный способ указать команду для парсера.
         # Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
@@ -106,7 +105,8 @@ class BlockParser:
         }
 
     def parse_dict(self, line, out_dict, converter):
-        command = 'dummy'
+        # По умолчанию команд нет
+        command = None
 
         key, substring = split_string_by_sep(line, self.params['sep_dict'], **self.params)
         result = converter.jsonify(substring)
@@ -128,7 +128,7 @@ class BlockParser:
         elif self.params.get('parser_version') == 'v1':
             command = 'dlist'
 
-        out_dict[key] = self.command_handlers[command](result)
+        out_dict[key] = self.command_handlers[command](result) if command else result
 
     def parse_string(self, line):
         return parse_string(line, self.params['to_num'])
