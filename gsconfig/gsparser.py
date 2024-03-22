@@ -376,10 +376,6 @@ class ConfigJSONConverter:
         for block in split_string_by_sep(string, self.params['sep_block'], **self.params):
             out.append(self.parser.parse_block(block, self))
                        
-        # Ничего не добавили, нечего и возвращать
-        if out is []:
-            return ''
-
         # Иначе каждый блок будет завернуть в лишний список
         return out[0] if len(out) == 1 else out
 
