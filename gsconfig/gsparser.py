@@ -15,24 +15,6 @@ def get_all_brackets(**params):
             brackets[value[-1]] = -1
     return brackets
 
-def get_all_separators(**params):
-    """
-    Возвращает все возможные разделители блоков.
-    params - параметры с настройками класса конвертора
-    """
-
-    separators = [' ', params['sep_block'], params['sep_base']]
-    return separators
-
-def strip_all_separators(string, separators):
-    """
-    Отрезает от строки все символы разделителей
-    """
-
-    for sep in separators:
-        string = string.strip(sep)
-    return string.strip()
-
 def define_split_points(string, sep, **params):
     """
     Определяет точки в которых необходимо разрезать строку.
@@ -79,53 +61,6 @@ def split_string_by_sep(string, sep, **params):
         yield string[prev:i].strip(sep).strip()
         prev = i
 
-def block_splitter(string, **params):
-    """
-    Разрезает строку по блокам. Конец блока определяется по:
-     - спец. символу окончания блока 
-     - изолироваванный самостоятельный блок выделенный {}
-
-    string - исходная строка для разбора
-    params - параметры с настройками класса конвертора
-    """
-
-    raw_pattern = params.get('raw_pattern')
-    br = get_all_brackets(**params)
-    separators = get_all_separators(**params)
-
-    is_not_raw_block = True
-    is_isolated_block = True
-    br_level = 0  # Глубина вложенности
-    block_start = 0  # Начало блока
-
-    for i, char in enumerate(string):
-        if char == raw_pattern:
-            is_not_raw_block = not is_not_raw_block
-        
-        # Считаем глубину вложенности по скобкам
-        elif (delta := br.get(char)) is not None:
-            br_level += delta
-
-        # Когда перед блоком что-то есть, то он не самостоятельный и отрезать его ничего не нужно
-        elif char not in separators and br_level == 0:
-            is_isolated_block = False
-
-        # Нашли символ конец блока (sep_block) и он не внутри других блоков
-        end_block_by_sep = char == params['sep_block'] and br_level == 0
-        # Блок закончился и он был самостоятельный
-        end_isolated_block = is_isolated_block and br_level == 0
-        # Конец строки
-        string_end = i == len(string) - 1
-
-        # Отправляем найденный блок и разбираем строку дальше
-        if (end_block_by_sep or end_isolated_block or string_end) and is_not_raw_block:
-            block = strip_all_separators(string[block_start:i + 1], separators)
-            # Пробелы в разбираемой строке могут создавать пустые блоки
-            if not block:
-                continue
-            yield block
-            block_start = i + 1
-
 def parse_string(s, to_num=True):
     """
     Пытается перевести строку в число, предварительно определив что это было, int или float
@@ -151,14 +86,14 @@ def parse_string(s, to_num=True):
     except (ValueError, SyntaxError):
         return s
 
-
 class BlockParser:
     def __init__(self, params):
         self.params = params
         self.command_handlers = {
             'list': lambda x: [x] if type(x) not in (list, tuple, ) else x,
             'dlist': lambda x: [x] if type(x) in (dict, ) else x,
-            'flist': lambda x: [x]
+            'flist': lambda x: [x],
+            'dummy': lambda x: x
         }
         # Синтаксический сахар для ключей конфига, альтернативный способ указать команду для парсера.
         # Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
@@ -167,17 +102,11 @@ class BlockParser:
         self.short_commands = {
             '[]': 'dlist',  
             '()': 'list',
-            '(!)': 'flist'
+            '{}': 'flist'
         }
 
-    def parse_dict(self, line, converter):
-        """
-        line - фрагмент строки для разбора
-        converter - обьект ConfigJSONConverter
-        """
-
-        # По умолчанием ключ идет без дополнительных команд
-        command = None
+    def parse_dict(self, line, out_dict, converter):
+        command = 'dummy'
 
         key, substring = split_string_by_sep(line, self.params['sep_dict'], **self.params)
         result = converter.jsonify(substring)
@@ -199,20 +128,12 @@ class BlockParser:
         elif self.params.get('parser_version') == 'v1':
             command = 'dlist'
 
-        if command:
-            result = self.command_handlers[command](result)
-        
-        return {key: result}
+        out_dict[key] = self.command_handlers[command](result)
 
     def parse_string(self, line):
         return parse_string(line, self.params['to_num'])
 
     def parse_block(self, string, converter):
-        """
-        string - строки для разбора
-        converter - обьект ConfigJSONConverter
-        """
-
         out = []
         out_dict = {}
 
@@ -222,24 +143,26 @@ class BlockParser:
             # Начало блока (Начинается с открывающей скобки)
             lambda line: line.startswith(self.params['br_block'][0]): lambda x: converter.jsonify(x[1:-1]),
             # Словарь (Внутри блока есть символ разделения словаря)
-            lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, converter),
+            lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, out_dict, converter),
         }
 
         for line in split_string_by_sep(string, self.params['sep_base'], **self.params):
             for condition, action in condition_mapping.items():
                 if condition(line):
-                    r = action(line)
-                    if isinstance(r, dict):
-                        out_dict.update(r)
-                    else:
-                        out.append(r)
-                    break
+                    result = action(line)
+                    # Когда блок содержит только строку эквивалетную Null, то result вернет Null.
+                    # Без дополнительной проверки содержимого он будет пропущен.
+                    # В таком случае надо проверять какие данные вернёт строка и если это тоже Null, 
+                    # значит значение было валидным и надо его сохранить.
+                    if result is not None or self.parse_string(line[1:-1]) is None:
+                        out.append(result)
+                    break                    
             else:
                 out.append(self.parse_string(line))
-        
+
         if out_dict:
             out.append(out_dict)
-        
+
         return out[0] if len(out) == 1 else out
 
 class ConfigJSONConverter:
@@ -337,7 +260,7 @@ class ConfigJSONConverter:
     Синтаксический сахар для ключей конфига, альтернативный способ указать команду для парсера.
     * [] - dlist
     * () - list
-    * (!) - flist
+    * (f) - flist
 
     Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
     Использование '[]' для всех ключей v2 будет эквивалентно использованию converter v1, 
@@ -418,7 +341,7 @@ class ConfigJSONConverter:
     # Доступные версии парсера
     AVAILABLE_VESRIONS = ('v1', 'v2')
 
-    def __init__(self, params=None):
+    def __init__(self, params={}):
         self.default_params = {
             'br_list': '[]',
             'br_block': '{}',
@@ -431,7 +354,7 @@ class ConfigJSONConverter:
             'parser_version': 'v1',
             'is_raw': False
         }
-        self.params = {**self.default_params, **(params or {})}
+        self.params = {**self.default_params, **params}
         self.parser = BlockParser(self.params)
 
     def jsonify(self, string: str, is_raw: bool = False) -> dict:
@@ -441,7 +364,7 @@ class ConfigJSONConverter:
         - is_raw -- в случае True строка не будет конвертироваться и возвращается как есть. Когда is_raw не задано, берем значение из настроект обьекта
         """
 
-        # Вернуть сырые строки как есть без конвертации
+        # Вернуть сырые строки как есть, без конвертации
         if is_raw or self.params['is_raw']:
             return string
 
@@ -449,15 +372,14 @@ class ConfigJSONConverter:
         string = str(string).strip()
 
         out = []
-        # Оределяем блоки и уже блоки передаем в разборку
-        # Блок бывает либо выделен br_block и разделяются sep_base
-        # Либо определяется наличием символа блока sep_block
-        for block in block_splitter(string, **self.params):
+        # Режем по символу блока sep_block
+        for block in split_string_by_sep(string, self.params['sep_block'], **self.params):
             out.append(self.parser.parse_block(block, self))
                        
         # Ничего не добавили, нечего и возвращать
-        if not out:
+        if out is []:
             return ''
 
         # Иначе каждый блок будет завернуть в лишний список
         return out[0] if len(out) == 1 else out
+
