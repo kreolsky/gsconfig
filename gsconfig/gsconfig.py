@@ -43,8 +43,7 @@ def extractor_json(page_data, **params):
     # 'key' - название столбца с ключами 
     # 'data' - контеж названий столбцов с данными
     if isinstance(scheme, dict):
-        key = scheme.get('key', 'key')
-        key_index = headers.index(key)
+        key_index = headers.index(scheme['key'])
         data_indexes = [headers.index(x) for x in scheme['data']]
         
         # Первый столбец проходит как дефолтный, из него буду взяты данные 
@@ -65,6 +64,7 @@ def extractor_json(page_data, **params):
                     line_data = line[default_data_index]
                 
                 bufer[line[key_index]] = parser.jsonify(line_data)
+
             out[headers[data_index]] = bufer
 
         return out
