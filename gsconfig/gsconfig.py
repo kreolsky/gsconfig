@@ -630,6 +630,7 @@ class GameConfigLite(Document):
     def __init__(self, spreadsheet_id, client=None):
         self.client = client or gspread.oauth()  # GoogleOauth object
         self.spreadsheet_id = spreadsheet_id  # Google Sheet ID
+
         self.page_skip_letters = {'#', '.'}
         self.key_skip_letters = {'#', '.'}
         self.parser_version = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
