@@ -17,7 +17,7 @@
  * @return {array} Массив строк соответствующих блокам.
  * @customfunction
  */
-function joinStringsBlock(data, sep_int, sep_ext, block_info, block_function = "lineplus", pattern = "") {
+function joinStringsBlock(data, sep_int, sep_ext, block_info, block_function, pattern = "") {
   pattern = pattern.includes("%%") ? pattern.split("%%").map(part => part.trim()) : "";
   const prefix = pattern[0] || "";
   const suffix = pattern[pattern.length - 1] || "";
@@ -27,7 +27,7 @@ function joinStringsBlock(data, sep_int, sep_ext, block_info, block_function = "
     block: defineBlock,
     blockplus: defineBlockPlus
   };
-  const intervals = blockFunctions[block_function](block_info);  
+  const intervals = blockFunctions[block_function || "lineplus"](block_info);  
   var out = new Array(data.length); // Инициализируем выходной массив с таким же количеством элементов, как в data
 
   for (var i = 0; i < intervals.length; i += 2) {
@@ -102,14 +102,14 @@ function toConfig(names_array, data_array, pattern = "") {
  * @return {array} Массив строк соответствующих блокам.
  * @customfunction
  */
-function toConfigBlock(headers, data, block_info, block_function = "blockplus", pattern = "") {
+function toConfigBlock(headers, data, block_info, block_function, pattern = "") {
   const blockFunctions = {
     line: defineOneLineBlock,
     lineplus: defineOneLineBlockPlus,
     block: defineBlock,
     blockplus: defineBlockPlus
   };
-  const intervals = blockFunctions[block_function](block_info);
+  const intervals = blockFunctions[block_function || "blockplus"](block_info);
   const out = new Array(data.length).fill(""); // Предварительное заполнение массива пустыми строками
 
   intervals.forEach((start, index) => {
