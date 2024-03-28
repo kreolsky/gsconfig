@@ -3,20 +3,31 @@
  * если блок из нескольких строк, то они склеиваются через внешний разделитель.
  * Данные начала блока указываются из вне. Блок – расстояние от одной запоненной строки до другой. Каждая заполненная строка – отдельный блок.
  *
- * @param {Опа!} sepInt Разделитель через который склеиваются данные внутри строки
- * @param {string} sepExt Разделитель через который склеиваются разные строки блока
+ * @param {array} data Столбец с информацией которую нужно склеивать
+ * @param {string} sep_int Разделитель через который склеиваются данные внутри строки
+ * @param {string} sep_ext Разделитель через который склеиваются разные строки блока
  * @param {array} block_info Донор информации для разделения блоков. Блоком считается расстояние между записями в столбце.
  * Например, если донором взять столбец с ключамии, то блоком будет содержимое строк от одного ключа (включая), до другого (не включая)
- * @param {array} data Столбец с информацией которую нужно склеивать
+ * @param {string} block_function Тип функции разбиения на блоки block, blockplus, line, lineplus (по умолчанию).
+ * line - Блок – каждая заполненную строку и только заполненная строка. Расстояние между строками не попадает в блок.
+ * lineplus - Блок начинается от одной запоненной строки до другой, не включая. Пустоты между строками относятся к вышестоящему блоку.
+ * block - Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
+ * blockplus - Блок начинается от одной группы записей и до следующей, не включая. Несколько записей подряд считаются одним блоком, пустоты между блоками относятся к вышестоящему блоку.
  * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! patern должен содержать "%%". Значение по умолчанию - ""
- * @return {array} result Массив строк соответствующих блокам.
+ * @return {array} Массив строк соответствующих блокам.
  * @customfunction
  */
-function joinStringsBlock(sepInt, sepExt, block_info, data, pattern = "") {
+function joinStringsBlock(data, sep_int, sep_ext, block_info, block_function = "lineplus", pattern = "") {
   pattern = pattern.includes("%%") ? pattern.split("%%").map(part => part.trim()) : "";
   const prefix = pattern[0] || "";
   const suffix = pattern[pattern.length - 1] || "";
-  const intervals = defineOneLineBlockPlus(block_info);
+  const blockFunctions = {
+    line: defineOneLineBlock,
+    lineplus: defineOneLineBlockPlus,
+    block: defineBlock,
+    blockplus: defineBlockPlus
+  };
+  const intervals = blockFunctions[block_function](block_info);  
   var out = new Array(data.length); // Инициализируем выходной массив с таким же количеством элементов, как в data
 
   for (var i = 0; i < intervals.length; i += 2) {
@@ -26,13 +37,13 @@ function joinStringsBlock(sepInt, sepExt, block_info, data, pattern = "") {
     for (var j = intervals[i]; j < intervals[i + 1]; j++) {
       var line = data[j].filter(isNotEmpty);
       if (line.length > 0) {
-        blockData.push(line.join(sepInt));
+        blockData.push(line.join(sep_int));
       }
     }
 
     // Склеиваем данные блока и добавляем обрамляющие скобки, если блок не пустой
     if (blockData.length > 0) {
-      var blockString = blockData.join(sepExt);
+      var blockString = blockData.join(sep_ext);
       out[intervals[i]] = prefix + blockString + suffix; // Записываем результат в позицию начала блока
     }
   }
@@ -45,13 +56,10 @@ function joinStringsBlock(sepInt, sepExt, block_info, data, pattern = "") {
  * ВАЖНО! В массиве с названиями должно быть хота бы 2 элемента.
  * Автоматически откусывает @ от начала заголовков и _tmp от конца в именах.
  *
- * @param {array} names
- * Строка с заголовками данных.
- * @param {array} data
- * Массив с данным под заголовками.
+ * @param {array} names Строка с заголовками данных.
+ * @param {array} data Массив с данным под заголовками.
  * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! patern должен содержать "%%". Значение по умолчанию - ""
- * @return {string} result
- * Данные склеены в одну строку
+ * @return {string} Данные склеены в одну строку
  * @customfunction
  */
 function toConfig(names_array, data_array, pattern = "") {
@@ -83,25 +91,24 @@ function toConfig(names_array, data_array, pattern = "") {
 /**
  * Расширение функции toConfig. Склеивает блоки с информацией в строки конфига. Разделение на блоки задается отдельно.
  * @param {array} headers Строка с заголовками данных.
- * @param {array} block_info Донор информации для разделения блоков.
  * @param {array} data Массив с данными под заголовками.
+ * @param {array} block_info Донор информации для разделения блоков.
  * @param {string} block_function Тип функции разбиения на блоки line, lineplus, block, blockplus (по умолчанию).
  * line - Блок – каждая заполненную строку и только заполненная строка. Расстояние между строками не попадает в блок.
  * lineplus - Блок начинается от одной запоненной строки до другой, не включая. Пустоты между строками относятся к вышестоящему блоку.
  * block - Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
  * blockplus - Блок начинается от одной группы записей и до следующей, не включая. Несколько записей подряд считаются одним блоком, пустоты между блоками относятся к вышестоящему блоку.
  * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! patern должен содержать "%%". Значение по умолчанию - ""
- * @return {array} result Массив строк соответствующих блокам.
+ * @return {array} Массив строк соответствующих блокам.
  * @customfunction
  */
-function toConfigBlock(headers, block_info, data, block_function = "blockplus", pattern = "") {
+function toConfigBlock(headers, data, block_info, block_function = "blockplus", pattern = "") {
   const blockFunctions = {
     line: defineOneLineBlock,
     lineplus: defineOneLineBlockPlus,
     block: defineBlock,
     blockplus: defineBlockPlus
   };
-
   const intervals = blockFunctions[block_function](block_info);
   const out = new Array(data.length).fill(""); // Предварительное заполнение массива пустыми строками
 
