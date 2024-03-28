@@ -1,45 +1,4 @@
 /**
- * Возвращает true, если хотя бы один элемент массива истинный.
- *
- * @param {array} iterable - Массив элементов для проверки.
- */
-function any(iterable) {
-  // Проверяем, является ли объект массивом
-  if (!Array.isArray(iterable)) {
-    // Для не массивов просто проверяем "истинность" самого объекта
-    return !!iterable;
-  }
-
-  // Возвращает true, если хотя бы один элемент массива "истинный"
-  return iterable.some(item => !!item);
-}
-
-/**
- * Возвращает true, если все элементы массива истинные.
- *
- * @param {array} iterable - Массив элементов для проверки.
- */
-function all(iterable) {
-  // Проверяем, является ли объект массивом
-  if (!Array.isArray(iterable)) {
-    // Для не массивов просто проверяем "истинность" самого объекта
-    return !!iterable;
-  }
-
-  // Возвращает true, если все элементы массива "истинные"
-  return iterable.every(item => !!item);
-}
-
-/**
- * Проверяет, не пуст ли элемент.
- *
- * @param {*} item - Элемент для проверки.
- */
-function isNotEmpty(item) {
-  return item !== undefined && item !== null && item !== '';
-}
-
-/**
  * Склеивает всё содержимое блока через разделители. Внутри одной строки – внутренний разделитель,
  * если блок из нескольких строк, то они склеиваются через внешний разделитель.
  * Данные начала блока указываются из вне. Блок – расстояние от одной запоненной строки до другой. Каждая заполненная строка – отдельный блок.
@@ -49,12 +8,12 @@ function isNotEmpty(item) {
  * @param {array} block_info Донор информации для разделения блоков. Блоком считается расстояние между записями в столбце.
  * Например, если донором взять столбец с ключамии, то блоком будет содержимое строк от одного ключа (включая), до другого (не включая)
  * @param {array} data Столбец с информацией которую нужно склеивать
- * @param {string} br Обрамляющие скобки. Не обязательно
+ * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% - результирующая строка. Важно! patern должен содержать "%%". Указыват не обязательно. Значение по умолчанию - ""
  * @return {array} Возвращает что-то
  * @customfunction
  */
-function joinStringsBlock(sepInt, sepExt, block_info, data, br) {
-  br = br || "";
+function joinStringsBlock(sepInt, sepExt, block_info, data, pattern = "") {
+  pattern = pattern.includes("%%") ? pattern.split("%%").map(part => part.trim()) : "";
   var out = new Array(data.length); // Инициализируем выходной массив с таким же количеством элементов, как в data
   
   var intervals = defineOneLineBlockPlus(block_info);
@@ -73,8 +32,8 @@ function joinStringsBlock(sepInt, sepExt, block_info, data, br) {
     // Склеиваем данные блока и добавляем обрамляющие скобки, если блок не пустой
     if (blockData.length > 0) {
       var blockString = blockData.join(sepExt);
-      if (br.length > 1) {
-        blockString = br[0] + blockString + br[1];
+      if (pattern.length > 1) {
+        blockString = pattern[0] + blockString + pattern[1];
       }
       out[intervals[i]] = blockString; // Записываем результат в позицию начала блока
     }
@@ -82,6 +41,85 @@ function joinStringsBlock(sepInt, sepExt, block_info, data, br) {
   
   return out;
 }
+
+/**
+ * Склеивание данных с заголовкам в формате names[0] = data[0][0], names[1] = data[0][1], names[2] = data[0][2] | names[1] = data[1][0], ...
+ * ВАЖНО! В массиве с названиями должно быть хота бы 2 элемента.
+ * Автоматически откусывает @ от начала заголовков и _tmp от конца в именах.
+ *
+ * @param {array} names
+ * Строка с заголовками данных.
+ * @param {array} data
+ * Массив с данным под заголовками.
+ * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% - результирующая строка. Важно! patern должен содержать "%%". Указыват не обязательно. Значение по умолчанию - ""
+ * @return {string} result
+ * Данные склеены в одну строку
+ * @customfunction
+ */
+function toConfig(names_array, data_array, pattern = "") {
+  pattern = pattern.includes("%%") ? pattern.split("%%").map(part => part.trim()) : "";
+  const prefix = pattern[0] || "";
+  const suffix = pattern[pattern.length - 1] || "";
+  var result = "";
+
+  const sepInt = ", ";  // Разделитель данных внутри блока
+  const sepBlock = " | ";  // Разделитель блоков
+  const sepString = " = ";  // Разделитель внутри строки
+
+  // Откусывает префикс "@" и суффикс "_tmp", если они есть
+  names_array = names_array[0].map(purgeName);
+
+  data_array.forEach((row, i) => {
+    if (any(row)) {
+      // Создаем строку конфигурации для текущей строки
+      var lineConfig = row.map((cell, j) => names_array[j] + sepString + cell).join(sepInt);
+      // Добавляем к общей строке, с разделителем блоков если это не первая строка
+      result += (i > 0 ? sepBlock : "") + lineConfig;
+    }
+  });
+
+  // Если после прохода по всем строкам txt не изменился, возвращаем пустую строку
+  return txt = prefix + result + suffix;
+}
+
+/**
+ * Расширение функции toConfig. Склеивает блоки с информацией в строки конфига. Разделение на блоки задается отдельно.
+ * @param {array} headers Строка с заголовками данных.
+ * @param {array} block_info Донор информации для разделения блоков.
+ * @param {array} data Массив с данными под заголовками.
+ * @param {string} block_function Тип функции разбиения на блоки line, lineplus, block, blockplus (по умолчанию).
+ * line - Блок – каждая заполненную строку и только заполненная строка. Расстояние между строками не попадает в блок.
+ * lineplus - Блок начинается от одной запоненной строки до другой, не включая. Пустоты между строками относятся к вышестоящему блоку.
+ * block - Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
+ * blockplus - Блок начинается от одной группы записей и до следующей, не включая. Несколько записей подряд считаются одним блоком, пустоты между блоками относятся к вышестоящему блоку.
+ * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% - результирующая строка. Важно! patern должен содержать "%%". Указыват не обязательно. Значение по умолчанию - ""
+ * @return {string} result Массив строк соответствующих блокам. Строки располагаются в начале блока.
+ * @customfunction
+ */
+function toConfigBlock(headers, block_info, data, block_function = "blockplus", pattern = "") {
+  const blockFunctions = {
+    line: defineOneLineBlock,
+    lineplus: defineOneLineBlockPlus,
+    block: defineBlock,
+    blockplus: defineBlockPlus
+  };
+
+  const intervals = blockFunctions[block_function](block_info);
+  const out = new Array(data.length).fill(""); // Предварительное заполнение массива пустыми строками
+
+  intervals.forEach((start, index) => {
+    if (index % 2 === 0) { // Проверяем, что index - четный, то есть start блока
+      const end = intervals[index + 1];
+      out[start] = toConfig(headers, data.slice(start, end), pattern);
+    }
+  });
+
+  return out;
+}
+
+/**
+ * Вспомогательные функции
+ */
 
 function purgeName(string) {
   // Удаление "#" с начала строки, если присутствует
@@ -182,74 +220,42 @@ function defineOneLineBlockPlus(data) {
 }
 
 /**
- * Склеивание данных с заголовкам в формате names[0] = data[0][0], names[1] = data[0][1], names[2] = data[0][2] | names[1] = data[1][0], ...
- * ВАЖНО! В массиве с названиями должно быть хота бы 2 элемента.
- * Автоматически откусывает @ от начала заголовков и _tmp от конца в именах.
+ * Возвращает true, если хотя бы один элемент массива истинный.
  *
- * @param {array} names
- * Строка с заголовками данных.
- * @param {array} data
- * Массив с данным под заголовками.
- * @return {string} result
- * Данные склеены в одну строку
- * @customfunction
+ * @param {array} iterable - Массив элементов для проверки.
  */
-function toConfig(names_array, data_array, br) {
-  br = br || "";
-  var txt = br[0] || "";
-  var txt_end = br.slice(-1) || "";
+function any(iterable) {
+  // Проверяем, является ли объект массивом
+  if (!Array.isArray(iterable)) {
+    // Для не массивов просто проверяем "истинность" самого объекта
+    return !!iterable;
+  }
 
-  var sepInt = ", ";  // Разделитель данных внутри блока
-  var sepBlock = " | ";  // Разделитель блоков
-  var sepString = " = ";  // Разделитель внутри строки
-
-  // Откусывает префикс "@" и суффикс "_tmp", если они есть
-  names_array = names_array[0].map(purgeName);
-
-  data_array.forEach((row, i) => {
-    if (any(row)) {
-      // Создаем строку конфигурации для текущей строки
-      var lineConfig = row.map((cell, j) => names_array[j] + sepString + cell).join(sepInt);
-      // Добавляем к общей строке, с разделителем блоков если это не первая строка
-      txt += (i > 0 ? sepBlock : "") + lineConfig;
-    }
-  });
-
-  // Если после прохода по всем строкам txt не изменился, возвращаем пустую строку
-  return txt === br[0] ? "" : txt + txt_end;
+  // Возвращает true, если хотя бы один элемент массива "истинный"
+  return iterable.some(item => !!item);
 }
 
 /**
- * Расширение функции toConfig. Склеивает блоки с информацией в строки конфига. Разделение на блоки задается отдельно.
- * @param {array} headers Строка с заголовками данных.
- * @param {array} block_info Донор информации для разделения блоков.
- * @param {array} data Массив с данными под заголовками.
- * @param {string} block_function Тип функции разбиения на блоки line, lineplus, block, blockplus (по умолчанию).
- * line - Блок – каждая заполненную строку и только заполненная строка. Расстояние между строками не попадает в блок.
- * lineplus - Блок начинается от одной запоненной строки до другой, не включая. Пустоты между строками относятся к вышестоящему блоку.
- * block - Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
- * blockplus - Блок начинается от одной группы записей и до следующей, не включая. Несколько записей подряд считаются одним блоком, пустоты между блоками относятся к вышестоящему блоку.
- * @param {string} br Обрамляющие строку скобки, Например: "{}".
- * @return {string} result Массив строк соответствующих блокам. Строки располагаются в начале блока.
- * @customfunction
+ * Возвращает true, если все элементы массива истинные.
+ *
+ * @param {array} iterable - Массив элементов для проверки.
  */
-function toConfigBlock(headers, block_info, data, block_function = "blockplus", br = "") {
-  const blockFunctions = {
-    line: defineOneLineBlock,
-    lineplus: defineOneLineBlockPlus,
-    block: defineBlock,
-    blockplus: defineBlockPlus
-  };
+function all(iterable) {
+  // Проверяем, является ли объект массивом
+  if (!Array.isArray(iterable)) {
+    // Для не массивов просто проверяем "истинность" самого объекта
+    return !!iterable;
+  }
 
-  const intervals = blockFunctions[block_function](block_info);
-  const out = new Array(data.length).fill(""); // Предварительное заполнение массива пустыми строками
+  // Возвращает true, если все элементы массива "истинные"
+  return iterable.every(item => !!item);
+}
 
-  intervals.forEach((start, index) => {
-    if (index % 2 === 0) { // Проверяем, что index - четный, то есть start блока
-      const end = intervals[index + 1];
-      out[start] = toConfig(headers, data.slice(start, end), br);
-    }
-  });
-
-  return out;
+/**
+ * Проверяет, не пуст ли элемент.
+ *
+ * @param {*} item - Элемент для проверки.
+ */
+function isNotEmpty(item) {
+  return item !== undefined && item !== null && item !== '';
 }
