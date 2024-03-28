@@ -14,9 +14,10 @@
  */
 function joinStringsBlock(sepInt, sepExt, block_info, data, pattern = "") {
   pattern = pattern.includes("%%") ? pattern.split("%%").map(part => part.trim()) : "";
+  const prefix = pattern[0] || "";
+  const suffix = pattern[pattern.length - 1] || "";
+  const intervals = defineOneLineBlockPlus(block_info);
   var out = new Array(data.length); // Инициализируем выходной массив с таким же количеством элементов, как в data
-  
-  var intervals = defineOneLineBlockPlus(block_info);
 
   for (var i = 0; i < intervals.length; i += 2) {
     var blockData = [];
@@ -32,10 +33,7 @@ function joinStringsBlock(sepInt, sepExt, block_info, data, pattern = "") {
     // Склеиваем данные блока и добавляем обрамляющие скобки, если блок не пустой
     if (blockData.length > 0) {
       var blockString = blockData.join(sepExt);
-      if (pattern.length > 1) {
-        blockString = pattern[0] + blockString + pattern[1];
-      }
-      out[intervals[i]] = blockString; // Записываем результат в позицию начала блока
+      out[intervals[i]] = prefix + blockString + suffix; // Записываем результат в позицию начала блока
     }
   }
   
@@ -79,7 +77,7 @@ function toConfig(names_array, data_array, pattern = "") {
   });
 
   // Если после прохода по всем строкам txt не изменился, возвращаем пустую строку
-  return txt = prefix + result + suffix;
+  return prefix + result + suffix;
 }
 
 /**
