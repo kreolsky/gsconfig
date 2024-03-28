@@ -1,6 +1,10 @@
 import ast
 
 
+"""
+Support functions
+"""
+
 def get_all_brackets(**params):
     """
     Возвращает все используемые в конверторе типы скобок.
@@ -85,6 +89,10 @@ def parse_string(s, to_num=True):
         return ast.literal_eval(s)
     except (ValueError, SyntaxError):
         return s
+
+"""
+Classes
+"""
 
 class BlockParser:
     def __init__(self, params):

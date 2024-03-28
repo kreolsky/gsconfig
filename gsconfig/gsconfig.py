@@ -148,6 +148,9 @@ def command_string(arg):
         return f'"{arg}"'
     return arg
 
+"""
+Classes
+"""
 
 class GSConfigError(Exception):
     def __init__(self, text='', value=-1):
