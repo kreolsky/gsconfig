@@ -18,7 +18,7 @@
  * @customfunction
  */
 function joinStringsBlock(sep_int, sep_block, data, block_info, block_function, wrapper = "") {
-  const [prefix, suffix] = wrapper.includes("%%") ? wrapper.split("%%").map(part => part.trim()) : ["", ""];
+  const [prefix, suffix] = wrapper.includes("%%") ? wrapper.split("%%") : ["", ""];
   const intervals = blockFunctions[block_function || "lineplus"](block_info);
   const out = new Array(data.length).fill(""); 
 
@@ -47,7 +47,7 @@ function joinStringsBlock(sep_int, sep_block, data, block_info, block_function, 
  * @customfunction
  */
 function toConfig(headers, data, wrapper = "") {
-  const [prefix, suffix] = wrapper.includes("%%") ? wrapper.split("%%").map(part => part.trim()) : ["", ""];
+  const [prefix, suffix] = wrapper.includes("%%") ? wrapper.split("%%") : ["", ""];
   const sep_int = ", ";  // Разделитель данных внутри блока
   const sep_block = " | ";  // Разделитель блоков
   const sep_string = " = ";  // Разделитель внутри строки
@@ -62,6 +62,7 @@ function toConfig(headers, data, wrapper = "") {
 
 /**
  * Расширение функции toConfig. Склеивает блоки с информацией в строки конфига. Разделение на блоки задается отдельно.
+ * 
  * @param {array} headers Строка с заголовками данных.
  * @param {array} data Массив с данными под заголовками.
  * @param {array} block_info Донор информации для разделения блоков.
