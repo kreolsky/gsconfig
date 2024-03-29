@@ -3,9 +3,9 @@
  * если блок из нескольких строк, то они склеиваются через внешний разделитель.
  * Данные начала блока указываются из вне. Блок – расстояние от одной запоненной строки до другой. Каждая заполненная строка – отдельный блок.
  *
- * @param {array} data Столбец с информацией которую нужно склеивать
  * @param {string} sep_int Разделитель через который склеиваются данные внутри строки
- * @param {string} sep_ext Разделитель через который склеиваются разные строки блока
+ * @param {string} sep_block Разделитель через который склеиваются разные строки блока
+ * @param {array} data Массив с данными которые нужно склеивать
  * @param {array} block_info Донор информации для разделения блоков. Блоком считается расстояние между записями в столбце.
  * Например, если донором взять столбец с ключамии, то блоком будет содержимое строк от одного ключа (включая), до другого (не включая)
  * @param {string} block_function Тип функции разбиения на блоки block, blockplus, line, lineplus (по умолчанию).
@@ -13,78 +13,50 @@
  * lineplus - Блок начинается от одной запоненной строки до другой, не включая. Пустоты между строками относятся к вышестоящему блоку.
  * block - Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
  * blockplus - Блок начинается от одной группы записей и до следующей, не включая. Несколько записей подряд считаются одним блоком, пустоты между блоками относятся к вышестоящему блоку.
- * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! patern должен содержать "%%". Значение по умолчанию - ""
+ * @param {string} wrapper Враппер обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! wrapper должен содержать "%%". Значение по умолчанию - "".
  * @return {array} Массив строк соответствующих блокам.
  * @customfunction
  */
-function joinStringsBlock(data, sep_int, sep_ext, block_info, block_function, pattern = "") {
-  pattern = pattern.includes("%%") ? pattern.split("%%").map(part => part.trim()) : "";
-  const prefix = pattern[0] || "";
-  const suffix = pattern[pattern.length - 1] || "";
-  const blockFunctions = {
-    line: defineOneLineBlock,
-    lineplus: defineOneLineBlockPlus,
-    block: defineBlock,
-    blockplus: defineBlockPlus
-  };
-  const intervals = blockFunctions[block_function || "lineplus"](block_info);  
-  var out = new Array(data.length); // Инициализируем выходной массив с таким же количеством элементов, как в data
+function joinStringsBlock(sep_int, sep_block, data, block_info, block_function, wrapper = "") {
+  const [prefix, suffix] = wrapper.includes("%%") ? wrapper.split("%%").map(part => part.trim()) : ["", ""];
+  const intervals = blockFunctions[block_function || "lineplus"](block_info);
+  const out = new Array(data.length).fill(""); 
 
-  for (var i = 0; i < intervals.length; i += 2) {
-    var blockData = [];
-    
-    // Собираем данные блока, используя функцию isNotEmpty для проверки
-    for (var j = intervals[i]; j < intervals[i + 1]; j++) {
-      var line = data[j].filter(isNotEmpty);
-      if (line.length > 0) {
-        blockData.push(line.join(sep_int));
-      }
+  intervals.forEach((start, index) => {
+    if (index % 2 === 0) {
+      const result = data.slice(start, intervals[index + 1])
+        .map(line => line.filter(isNotEmpty).join(sep_int))
+        .filter(Boolean)
+        .join(sep_block);
+      if (result) out[start] = prefix + result + suffix;
     }
-
-    // Склеиваем данные блока и добавляем обрамляющие скобки, если блок не пустой
-    if (blockData.length > 0) {
-      var blockString = blockData.join(sep_ext);
-      out[intervals[i]] = prefix + blockString + suffix; // Записываем результат в позицию начала блока
-    }
-  }
+  });
   
   return out;
 }
 
 /**
- * Склеивание данных с заголовкам в формате names[0] = data[0][0], names[1] = data[0][1], names[2] = data[0][2] | names[1] = data[1][0], ...
+ * Склеивание данных с заголовкам в формате headers[0] = data[0][0], headers[1] = data[0][1], headers[2] = data[0][2] | headers[1] = data[1][0], ...
  * ВАЖНО! В массиве с названиями должно быть хота бы 2 элемента.
  * Автоматически откусывает @ от начала заголовков и _tmp от конца в именах.
  *
- * @param {array} names Строка с заголовками данных.
+ * @param {array} headers Строка с заголовками данных.
  * @param {array} data Массив с данным под заголовками.
- * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! patern должен содержать "%%". Значение по умолчанию - ""
- * @return {string} Данные склеены в одну строку
+ * @param {string} wrapper Враппер обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! wrapper должен содержать "%%". Значение по умолчанию - "".
+ * @return {string} Данные склеены в одну строку.
  * @customfunction
  */
-function toConfig(names_array, data_array, pattern = "") {
-  pattern = pattern.includes("%%") ? pattern.split("%%").map(part => part.trim()) : "";
-  const prefix = pattern[0] || "";
-  const suffix = pattern[pattern.length - 1] || "";
-  var result = "";
+function toConfig(headers, data, wrapper = "") {
+  const [prefix, suffix] = wrapper.includes("%%") ? wrapper.split("%%").map(part => part.trim()) : ["", ""];
+  const sep_int = ", ";  // Разделитель данных внутри блока
+  const sep_block = " | ";  // Разделитель блоков
+  const sep_string = " = ";  // Разделитель внутри строки
+  
+  const result = data
+    .filter(row => any(row))
+    .map(row => row.map((cell, j) => purgeName(headers[0][j]) + sep_string + cell).join(sep_int))
+    .join(sep_block);
 
-  const sepInt = ", ";  // Разделитель данных внутри блока
-  const sepBlock = " | ";  // Разделитель блоков
-  const sepString = " = ";  // Разделитель внутри строки
-
-  // Откусывает префикс "@" и суффикс "_tmp", если они есть
-  names_array = names_array[0].map(purgeName);
-
-  data_array.forEach((row, i) => {
-    if (any(row)) {
-      // Создаем строку конфигурации для текущей строки
-      var lineConfig = row.map((cell, j) => names_array[j] + sepString + cell).join(sepInt);
-      // Добавляем к общей строке, с разделителем блоков если это не первая строка
-      result += (i > 0 ? sepBlock : "") + lineConfig;
-    }
-  });
-
-  // Если после прохода по всем строкам txt не изменился, возвращаем пустую строку
   return prefix + result + suffix;
 }
 
@@ -98,34 +70,39 @@ function toConfig(names_array, data_array, pattern = "") {
  * lineplus - Блок начинается от одной запоненной строки до другой, не включая. Пустоты между строками относятся к вышестоящему блоку.
  * block - Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
  * blockplus - Блок начинается от одной группы записей и до следующей, не включая. Несколько записей подряд считаются одним блоком, пустоты между блоками относятся к вышестоящему блоку.
- * @param {string} pattern Паттерт обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! patern должен содержать "%%". Значение по умолчанию - ""
+ * @param {string} wrapper Враппер обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! wrapper должен содержать "%%". Значение по умолчанию - "".
  * @return {array} Массив строк соответствующих блокам.
  * @customfunction
  */
-function toConfigBlock(headers, data, block_info, block_function, pattern = "") {
-  const blockFunctions = {
-    line: defineOneLineBlock,
-    lineplus: defineOneLineBlockPlus,
-    block: defineBlock,
-    blockplus: defineBlockPlus
-  };
+function toConfigBlock(headers, data, block_info, block_function, wrapper = "") {
   const intervals = blockFunctions[block_function || "blockplus"](block_info);
-  const out = new Array(data.length).fill(""); // Предварительное заполнение массива пустыми строками
+  const result = new Array(data.length).fill(""); // Предварительное заполнение массива пустыми строками
 
   intervals.forEach((start, index) => {
     if (index % 2 === 0) { // Проверяем, что index - четный, то есть start блока
-      const end = intervals[index + 1];
-      out[start] = toConfig(headers, data.slice(start, end), pattern);
+      result[start] = toConfig(headers, data.slice(start, intervals[index + 1]), wrapper);
     }
   });
 
-  return out;
+  return result;
 }
+
+/**
+ * Обьект выбора функции определения блока
+ */
+
+const blockFunctions = {
+  line: defineOneLineBlock,
+  lineplus: defineOneLineBlockPlus,
+  block: defineBlock,
+  blockplus: defineBlockPlus
+};
 
 /**
  * Вспомогательные функции
  */
 
+// Удаление мусора из заголовков
 function purgeName(string) {
   // Удаление "#" с начала строки, если присутствует
   if (string.startsWith("#")) {
