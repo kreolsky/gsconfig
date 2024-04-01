@@ -148,7 +148,7 @@ function defineBlockPlus(data) {
 
   // Перебираем все строки данных
   data.forEach((item, i) => {
-    if (isNotEmpty(item[0])) {
+    if (isNotEmpty(item)) {
       // Если строка непустая и мы находимся в начале нового блока
       if (new_block) {
         // Если это не самый первый блок, добавляем индекс как конец предыдущего блока
@@ -189,7 +189,7 @@ function defineOneLineBlockPlus(data) {
   var flag = false; // Флаг первого элемента последовательности
 
   data.forEach(function(row, index) {
-    if (all(row)) {
+    if (isNotEmpty(row)) {
       out.push(index); // Индекс начала первого блока и конец блока для всех остальных
       if (flag) {
         out.push(index); // Индекс начала второго и всех последующих блоков
@@ -240,5 +240,5 @@ function all(iterable) {
  * @param {*} item - Элемент для проверки.
  */
 function isNotEmpty(item) {
-  return item !== undefined && item !== null && item !== '';
+  return String(item).length > 0
 }
