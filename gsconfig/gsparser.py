@@ -268,7 +268,7 @@ class ConfigJSONConverter:
     Синтаксический сахар для ключей конфига, альтернативный способ указать команду для парсера.
     * [] - dlist
     * () - list
-    * (f) - flist
+    * {} - flist
 
     Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
     Использование '[]' для всех ключей v2 будет эквивалентно использованию converter v1, 
@@ -365,7 +365,7 @@ class ConfigJSONConverter:
         self.params = {**self.default_params, **params}
         self.parser = BlockParser(self.params)
 
-    def jsonify(self, string: str, is_raw: bool = False) -> dict:
+    def jsonify(self, string: str, is_raw: bool = False) -> dict | list:
         """
         Метод переводящий строку конфига в JSON
         - string -- исходная строка для конвертации
@@ -384,6 +384,6 @@ class ConfigJSONConverter:
         for block in split_string_by_sep(string, self.params['sep_block'], **self.params):
             out.append(self.parser.parse_block(block, self))
                        
-        # Иначе каждый блок будет завернуть в лишний список
+        # Иначе каждый блок будет завернуть в лишний список (по механике создания out)
         return out[0] if len(out) == 1 else out
 
