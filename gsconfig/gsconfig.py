@@ -195,6 +195,8 @@ class Template(object):
     int -- Переводит в целые значения отбрасыванием дробной части
     Пример: Получено число 10.9, в шаблон оно будет записано как 10
 
+    json -- Сохраняет структура как JSON (применяет json.dumps())
+
     extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
     Пример: По умолчанию парсер не разворачивает словари и они приходят вида [{'a': 1, 'b': 2}],
     если обязательно нужен словарь, то extract развернёт полученный список до {'a': 1, 'b': 2}
@@ -218,6 +220,7 @@ class Template(object):
             'dummy': lambda x: x,
             'float': lambda x: float(x),
             'int': lambda x: int(x),
+            'json': lambda x: json.dumps(x),
             'string': command_string,
             'extract': command_extract,
             'wrap': command_wrap

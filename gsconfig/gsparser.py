@@ -1,4 +1,5 @@
 import ast
+import json
 
 
 """
@@ -103,7 +104,8 @@ class BlockParser:
             'flist': lambda x: [x],
             'string': lambda x: str(x),
             'int': lambda x: int(x),
-            'float': lambda x: float(x)
+            'float': lambda x: float(x),
+            'json': lambda x: json.dumps(x)
         }
         # Синтаксический сахар для ключей конфига, альтернативный способ указать команду для парсера.
         # Ключ this_is_the_key[] будет идентичен this_is_the_key!dlist
@@ -266,6 +268,7 @@ class ConfigJSONConverter:
     * flist - всегда заворачивает в дополнительный список, даже списки!
     * dlist - заворачивает только если внутри словарь (dict)
     * string - значение всегда переводится в строки. Требует осторожности для сложных типов данных
+    * json - преобразует значение в JSON
     * int - значение всегда будет int (отбрасывает целую часть). Например 1.6 -> 1
     * float - значение всегда будет float. Например 1 -> 1.0
 
