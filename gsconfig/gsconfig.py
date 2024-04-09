@@ -23,13 +23,13 @@ def extractor_json(page_data, **params):
     Когда формат не указан - возвращает сырые данные как двумерный массив.
 
     Понимает несколько схем компановки данных. Проверка по очереди:
-    1. Используется схема данных. См. Page.scheme и Page.set_scheme()
+    1. Используется схема данных. См. Page.schema и Page.set_schema()
     2. Свободный формат, первая строка - ключи, все последуюшие - данные соответствующие этим ключам
 
     **params - все параметры доступные для парсера parser.jsonify
     """
 
-    scheme = params.get('scheme')
+    schema = params.get('schema')
     key_skip_letters = params.get('key_skip_letters', [])
 
     headers = page_data[0]  # Заголовки
@@ -38,13 +38,13 @@ def extractor_json(page_data, **params):
     # Парсер конфигов из гуглодоки в JSON
     parser = gsparser.ConfigJSONConverter(params)
 
-    # Указана обычная схема (scheme) хранения данных. Данные в несоклько колонок 
-    # sheme = {'key': 'key', 'data': ('value_1', 'value_2')}, где 
+    # Указана обычная схема (schema) хранения данных. Данные в несоклько колонок 
+    # schema = {'key': 'key', 'data': ('value_1', 'value_2')}, где 
     # 'key' - название столбца с ключами 
     # 'data' - контеж названий столбцов с данными
-    if isinstance(scheme, dict):
-        key_index = headers.index(scheme['key'])
-        data_indexes = [headers.index(x) for x in scheme['data']]
+    if isinstance(schema, dict):
+        key_index = headers.index(schema['key'])
+        data_indexes = [headers.index(x) for x in schema['data']]
         
         # Первый столбец проходит как дефолтный, из него буду взяты данные 
         # когда в соответствующих строках других столбцов будет пусто
@@ -69,13 +69,13 @@ def extractor_json(page_data, **params):
 
         return out
 
-    # Простая схема данных. Документ из двух колонок sheme = ('key', 'data'), где 
+    # Простая схема данных. Документ из двух колонок schema = ('key', 'data'), где 
     # 'key' - название столбца с ключами 
     # 'data' - название столбца с данными 
     # Схема -- кортеж и все элементы схемы представлены в заголовке
-    if isinstance(scheme, tuple) and all(x in headers for x in scheme):
-        key_index = headers.index(scheme[0])
-        data_index = headers.index(scheme[-1])
+    if isinstance(schema, tuple) and all(x in headers for x in schema):
+        key_index = headers.index(schema[0])
+        data_index = headers.index(schema[-1])
 
         out = {}
         for line in data:
@@ -357,7 +357,7 @@ class Page(object):
         self.worksheet = worksheet  # Source gspread.Worksheet object
         self.key_skip_letters = set()
         self.parser_version = None
-        self.scheme = ('key', 'data')  # Схема хранение данных в двух столбцах
+        self.schema = ('key', 'data')  # Схема хранение данных в двух столбцах
         self.is_raw = False  # По умолчанию всегда будет парсить данные при сохранении в json 
         self._format = None
         self._cache = None
@@ -446,30 +446,30 @@ class Page(object):
 
         self.parser_version = parser_version
 
-    def set_scheme(self, scheme):
+    def set_schema(self, schema):
         """
         Задает схему формата данных в столбцах.
 
-        scheme -- схема хранения данных в несколько колонок на странице.
+        schema -- схема хранения данных в несколько колонок на странице.
 
         Упрощенная схема. Всегда указана по умолчанию. 
         Данные будут выгружены как словарь из пар в столбцах key = data
-        Кортеж из 2х элементов: scheme = ('key', 'data'), где
+        Кортеж из 2х элементов: schema = ('key', 'data'), где
         'key' - названия столбца с ключами
         'data' - названия столбца с данными
         
         Обычная схема. Данные будут дополнительно завернуты в словари с названием столбца данных.
         Словарь вида (Названия ключей словаря фиксированы!):
-        scheme = {
+        schema = {
             'key': 'key'  # Название столбца с данными
             'data': ['value_1', 'value_2']  # Список названий столбцов данных
         }
         """
 
-        if type(scheme) not in (tuple, dict):
-            raise ValueError(f'The scheme should be tuple or dict!')
+        if type(schema) not in (tuple, dict):
+            raise ValueError(f'The schema should be tuple or dict!')
 
-        self.scheme = scheme
+        self.schema = schema
 
     def set_format(self, format='json'):
         """
@@ -495,7 +495,7 @@ class Page(object):
         Когда формат не указан - возвращает сырые данные как двумерный массив.
 
         Понимает несколько схем компановки данных. Проверка по очереди:
-        1. Используется схема данных. См. self.scheme и self.set_scheme()
+        1. Используется схема данных. См. self.schema и self.set_schema()
         2. Свободный формат, первая строка - ключи, все последуюшие - данные
 
         **params - все параметры доступные для парсера parser.jsonify
@@ -505,7 +505,7 @@ class Page(object):
             self._cache = self.worksheet.get_all_values()
 
         params['is_raw'] = self.is_raw
-        params['scheme'] = self.scheme
+        params['schema'] = self.schema
         params['key_skip_letters'] = self.key_skip_letters
         params['parser_version'] = self.parser_version  # available version: v1, v2
         

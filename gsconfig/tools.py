@@ -95,3 +95,18 @@ def dict_to_str(source, tab='', count=0):
         output += f'{tab * count}{str(key)}: {end}{str(value)}\n'
 
     return output[:-1]
+
+def load_json(filename, path=''):
+    file_path = os.path.join(path, filename)
+
+    try:
+        with open(file_path, 'r') as file:
+            json_data = json.load(file)
+        
+        return json_data
+    except IOError as err:
+        raise IOError(f"Error reading the file: {err}") from err
+    except ValueError:
+        raise ValueError("The file does not contain valid JSON.") from None
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred: {e}") from e
