@@ -38,24 +38,30 @@ function joinStringsBlock(sep_int, sep_block, data, block_info, block_function, 
 /**
  * Склеивание данных с заголовкам в формате headers[0] = data[0][0], headers[1] = data[0][1], headers[2] = data[0][2] | headers[1] = data[1][0], ...
  * ВАЖНО! В массиве с названиями должно быть хота бы 2 элемента.
- * Автоматически откусывает @ от начала заголовков и _tmp от конца в именах.
+ * Автоматически откусывает # от начала заголовков и _tmp от конца в именах.
  *
  * @param {array} headers Строка с заголовками данных.
  * @param {array} data Массив с данным под заголовками.
- * @param {string} wrapper Враппер обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! wrapper должен содержать "%%". Значение по умолчанию - "".
+ * @param {string} wrapper Враппер обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! wrapper должен содержать "%%". Значение по умолчанию - "" (пустая строка).
+ * @param {bool} skip_empty Флаг указывает пропускать или нет ячейки для которых нет данных. Если false, то заголовки будут с указанием пустых данных. Значение по умолчанию - "false"
  * @return {string} Данные склеены в одну строку.
  * @customfunction
  */
-function toConfig(headers, data, wrapper = "") {
+function toConfig(headers, data, wrapper = "", skip_empty=false) {
   const [prefix, suffix] = wrapper.includes("%%") ? wrapper.split("%%") : ["", ""];
   const sep_int = ", ";  // Разделитель данных внутри блока
   const sep_block = " | ";  // Разделитель блоков
   const sep_string = " = ";  // Разделитель внутри строки
-  
+
   const result = data
-    .filter(row => any(row))
-    .map(row => row.map((cell, j) => purgeName(headers[0][j]) + sep_string + cell).join(sep_int))
-    .join(sep_block);
+      .filter(row => row.some(cell => isNotEmpty(cell))) // Filter rows with at least one non-empty cell
+      .map(row => row.map((cell, j) => {
+          const header = purgeName(headers[0][j]);
+          return (!isNotEmpty(cell) & skip_empty) ? "" : header + sep_string + cell; // If cell is empty, return empty string
+        })
+        .filter(cell => isNotEmpty(cell))
+        .join(sep_int))
+      .join(sep_block);  
 
   return prefix + result + suffix;
 }
@@ -71,17 +77,18 @@ function toConfig(headers, data, wrapper = "") {
  * lineplus - Блок начинается от одной запоненной строки до другой, не включая. Пустоты между строками относятся к вышестоящему блоку.
  * block - Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
  * blockplus - Блок начинается от одной группы записей и до следующей, не включая. Несколько записей подряд считаются одним блоком, пустоты между блоками относятся к вышестоящему блоку.
- * @param {string} wrapper Враппер обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! wrapper должен содержать "%%". Значение по умолчанию - "".
+ * @param {string} wrapper Враппер обрамляющий результат. Формат "prefix %% suffix", где %% результирующая строка. Важно! wrapper должен содержать "%%". Значение по умолчанию - "" (пустая строка).
+ * @param {bool} skip_empty Флаг указывает пропускать или нет ячейки для которых нет данных. Если false, то заголовки будут с указанием пустых данных. Значение по умолчанию - "false"
  * @return {array} Массив строк соответствующих блокам.
  * @customfunction
  */
-function toConfigBlock(headers, data, block_info, block_function, wrapper = "") {
+function toConfigBlock(headers, data, block_info, block_function, wrapper = "", skip_empty=false) {
   const intervals = blockFunctions[block_function || "blockplus"](block_info);
   const result = new Array(data.length).fill(""); // Предварительное заполнение массива пустыми строками
 
   intervals.forEach((start, index) => {
     if (index % 2 === 0) { // Проверяем, что index - четный, то есть start блока
-      result[start] = toConfig(headers, data.slice(start, intervals[index + 1]), wrapper);
+      result[start] = toConfig(headers, data.slice(start, intervals[index + 1]), wrapper, skip_empty);
     }
   });
 
@@ -104,18 +111,8 @@ const blockFunctions = {
  */
 
 // Удаление мусора из заголовков
-function purgeName(string) {
-  // Удаление "#" с начала строки, если присутствует
-  if (string.startsWith("#")) {
-    string = string.slice(1);
-  }
-
-  // Удаление "_tmp" с конца строки, если присутствует
-  if (string.endsWith("_tmp")) {
-    string = string.slice(0, -4);
-  }
-
-  return string;
+function purgeName(name) {
+  return name.replace(/^#/, "").replace(/_tmp$/, "");
 }
 
 // Определяет расстояние между записями в столбце. Блок начинается от одной записи и до следующей не включая. Несколько записей подряд считаются одним блоком.
