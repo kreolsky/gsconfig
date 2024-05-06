@@ -54,7 +54,7 @@ function toConfig(headers, data, wrapper = "", skip_empty=false) {
   const sep_string = " = ";  // Разделитель внутри строки
 
   const result = data
-      .filter(row => row.some(cell => isNotEmpty(cell))) // Filter rows with at least one non-empty cell
+      .filter(row => any(row)) // Только для ячеек где заполнена хотя бы одна
       .map(row => row.map((cell, j) => {
           const header = purgeName(headers[0][j]);
           return (!isNotEmpty(cell) & skip_empty) ? "" : header + sep_string + cell; // If cell is empty, return empty string
