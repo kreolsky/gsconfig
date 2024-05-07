@@ -7,19 +7,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from . import gsconfig
 from . import gsparser
 
-def get_google_client(json_keyfile):
-    """
-    Коннект к гуглотабличкам. См подробности в офф доке gspread
-
-    https://github.com/burnash/gspread
-    http://gspread.readthedocs.io/en/latest/
-    """
-
-    scope = ['https://spreadsheets.google.com/feeds']
-    credentials = ServiceAccountCredentials.from_json_keyfile_name(json_keyfile, scope)
-
-    return gspread.authorize(credentials)
-
 
 def save_page(page, path=''):
     """

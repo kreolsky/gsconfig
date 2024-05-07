@@ -2,6 +2,7 @@ import os
 import gspread
 import json
 import re
+from oauth2client.service_account import ServiceAccountCredentials
 from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 
@@ -151,6 +152,27 @@ def command_string(arg):
 """
 Classes
 """
+
+class GoogleOauth():
+    def __init__(self, keyfile=None) -> None:
+        self.keyfile = keyfile
+
+    @cached_property
+    def client(self):
+        """
+        Коннект к гуглотабличкам. См подробности в офф доке gspread
+
+        https://github.com/burnash/gspread
+        http://gspread.readthedocs.io/en/latest/
+        """
+
+        if not self.keyfile: 
+            return gspread.oauth()
+        
+        scope = ['https://spreadsheets.google.com/feeds']
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(self.keyfile, scope)
+        return gspread.authorize(credentials)
+
 
 class GSConfigError(Exception):
     def __init__(self, text='', value=-1):
@@ -634,7 +656,7 @@ class GameConfigLite(Document):
     """
 
     def __init__(self, spreadsheet_id, client=None):
-        self.client = client or gspread.oauth()  # GoogleOauth object
+        self.client = client  # GoogleOauth object
         self.spreadsheet_id = spreadsheet_id  # Google Sheet ID
 
         self.page_skip_letters = {'#', '.'}
@@ -663,8 +685,8 @@ class GameConfig(object):
     """
 
     def __init__(self, spreadsheet_ids=[], client=None):
-        self.client = client or gspread.oauth()
-        self.spreadsheet_ids = spreadsheet_ids
+        self.client = client  # GoogleOauth object
+        self.spreadsheet_ids = spreadsheet_ids  # Config ids
 
         self.page_skip_letters = {'#', '.'}
         self.key_skip_letters = {'#', '.'}

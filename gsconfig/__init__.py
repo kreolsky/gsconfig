@@ -1,3 +1,4 @@
+from .gsconfig import GoogleOauth
 from .gsconfig import Template
 from .gsconfig import GameConfigLite
 from .gsconfig import GameConfig
@@ -17,5 +18,5 @@ ConfigJSONConverter -- класс конвертора из промежуточ
 
 """
 
-__version__ = '0.6.5'
+__version__ = '0.6.6'
 __author__ = 'Serge Zaigraeff'
