@@ -4,7 +4,7 @@ import json
 import re
 from oauth2client.service_account import ServiceAccountCredentials
 from concurrent.futures import ThreadPoolExecutor
-from functools import cached_property
+from functools import lru_cache
 
 from . import tools
 from . import gsparser
@@ -157,7 +157,8 @@ class GoogleOauth():
     def __init__(self, keyfile=None) -> None:
         self.keyfile = keyfile
 
-    @cached_property
+    @property
+    @lru_cache(maxsize=1)
     def client(self):
         """
         Коннект к гуглотабличкам. См подробности в офф доке gspread
@@ -663,7 +664,8 @@ class GameConfigLite(Document):
         self.key_skip_letters = {'#', '.'}
         self.parser_version = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
 
-    @cached_property
+    @property
+    @lru_cache(maxsize=1)
     def spreadsheet(self):
         """
         Returns a gspread.Spreadsheet object
@@ -692,16 +694,13 @@ class GameConfig(object):
         self.key_skip_letters = {'#', '.'}
         self.parser_version = 'v1'  # Available only 'v1' and 'v2' mode. See gsparser for details
 
-        self._cache = []
         self._max_workers = 5
 
     @property
+    @lru_cache(maxsize=1)
     def documents(self) -> list:
-        if not self._cache:
-            with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
-                self._cache = list(pool.map(self._create_document, self.spreadsheet_ids))
-
-        return self._cache
+        with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
+            return list(pool.map(self._create_document, self.spreadsheet_ids))
     
     def __iter__(self):
         for document in self.documents:
@@ -742,5 +741,3 @@ class GameConfig(object):
 
         for document in self.documents:
             document.save(path, mode)
-
-
