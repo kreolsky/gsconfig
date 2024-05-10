@@ -57,9 +57,9 @@ function toConfig(headers, data, wrapper = "", skip_empty=false) {
       .filter(row => any(row)) // Только для ячеек где заполнена хотя бы одна
       .map(row => row.map((cell, j) => {
           const header = purgeName(headers[0][j]);
-          return (!isNotEmpty(cell) & skip_empty) ? "" : header + sep_string + cell; // If cell is empty, return empty string
+          return (!isNotEmpty(cell) & skip_empty) ? "" : header + sep_string + cell;
         })
-        .filter(cell => isNotEmpty(cell))
+        .filter(Boolean)
         .join(sep_int))
       .join(sep_block);  
 
