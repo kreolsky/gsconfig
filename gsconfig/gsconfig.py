@@ -108,7 +108,7 @@ def extractor_json(page_data, **params):
 
 
 """
-Template command handlers
+Template key command handlers
 """
 
 def command_extract(array):
@@ -209,7 +209,7 @@ class Template(object):
     1. command_letter всегда должен быть включен в pattern
     2. ключ + команда в pattern всегда должены быть в первой группе регулярного выражения
 
-    Дополнительные команды доступные в ключах шаблона:
+    ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ В КЛЮЧАХ ШАБЛОНА:
     dummy -- Пустышка, ничего не длает.
 
     float -- Переводит в начения с плавающей запятой.
@@ -231,6 +231,11 @@ class Template(object):
     Используется когда заранее неизвестно будет ли там значение и выбор между null и строкой.
     Например, в новостях мультиивентов поле "sns": {news_sns!string}.
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
+
+    ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ В УПРАВЛЕНИЯ СТРОКАМИ ШАБЛОНА:
+    keep_if -- сохранить строку между тегами условия если параметр True, иначе удалить
+    
+    del_if -- сохранить строку между тегами условия если параметр True, иначе удалить
     """
 
     def __init__(self, path='', body='', pattern=None, command_letter=None, strip=True, jsonify=False):
@@ -239,7 +244,7 @@ class Template(object):
         self.command_letter = command_letter or '!'
         self.strip = strip
         self.jsonify = jsonify
-        self.command_handlers = {
+        self.key_command_handlers = {
             'dummy': lambda x: x,
             'float': lambda x: float(x),
             'int': lambda x: int(x),
@@ -247,6 +252,10 @@ class Template(object):
             'string': command_string,
             'extract': command_extract,
             'wrap': command_wrap
+        }
+        self.strings_command_handlers = {
+            'keep_if': lambda params, content, data: content if data.get(params) else '',
+            'del_if': lambda params, content, data: '' if data.get(params) else content
         }
         self._body = body
         self._keys = []
@@ -324,7 +333,7 @@ class Template(object):
 
         Свойства класса влияющие на сборку конфига из шаблона:
         
-        strip -- Будет ли отрезать от строк лишние кавычки. 
+        self.strip -- Будет ли отрезать от строк лишние кавычки. 
             True (по умолчанию) - Отрезает кавычки от строк. 
             В шаблоне НЕОБХОДИМО проставлять кавычки для всех строковых данных.
             Либо явно указывать трансформацию в строку при помощи команды !string
@@ -332,10 +341,44 @@ class Template(object):
             False - Строки будут автоматически завернуты в кавычки. 
             Невозможно использовать переменные в подстроках.
         
-        jsonify -- Забрать как словарь. False - по умолчанию, забирает как строку.
+        self.jsonify -- Забрать как словарь. False - по умолчанию, забирает как строку.
         """
 
+        def process_template(template_body, balance, pattern=None):
+            """
+            Обрабатывает содержимое файла, заменяя или удаляя строки на основе параметров.
+            Доступные команды:
+            keep_it [param] -- сохраняет строку если param == true, иначе удаляет
+            del_it [param] -- удаляет строку если param == true, иначе сохраняет
+            
+            :param template_body: Строка с содержимым файла.
+            :param data: Словарь с данными, используемыми для проверки флагов.
+            :param pattern: Регулярное выражение для поиска. Если не указано, используется стандартное.
+            :return: Обработанное содержимое файла.
+            """
+            if pattern is None:
+                # Дефолтные группы:
+                # 1. Команда (например, 'keep_if')
+                # 2. Флаг (например, 'custom_price_tiers_flag')
+                # 3. Строка шаблона ради которой всё и затевается
+                pattern = r'(\{%%\s*([\w_]+)\s+([\w_]+)\s*%%\}(.*?)\{%%\s*end_\2\s*%%\})'
+            
+            pattern = re.compile(pattern, re.DOTALL)
+            matches = pattern.findall(template_body)
+            
+            for match in matches:
+                full_match, command, params, content = match
+                if command not in self.strings_command_handlers:
+                    raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.strings_command_handlers.keys())}")
+
+                processed_content = self.strings_command_handlers[command](params, content, balance)
+                template_body = template_body.replace(full_match, processed_content)
+            
+            return template_body
+
         def replace_keys(match):
+            # Заполняет шаблон значениями
+            # И обрабатывает команды в ключах
             key_command_pair = match.group(1).split(self.command_letter)
 
             # Ключ, который будет искаться для замены 
@@ -352,9 +395,9 @@ class Template(object):
                 command = key_command_pair[-1]
 
                 # Обработка ошибки отсутствия команды
-                if command not in self.command_handlers:
-                    raise ValueError(f"Command '{command}' is not supported by Template class")
-                insert_balance = self.command_handlers[command](insert_balance)
+                if command not in self.key_command_handlers:
+                    raise ValueError(f"Key command '{command}' is not supported by Template class. Available only {list(self.key_command_handlers.keys())}")
+                insert_balance = self.key_command_handlers[command](insert_balance)
 
             # Возвращаем строки как есть
             if self.strip and isinstance(insert_balance, str):
@@ -362,7 +405,9 @@ class Template(object):
 
             return json.dumps(insert_balance)
 
-        out = re.sub(self.pattern, replace_keys, self.body)
+
+        template_body = process_template(self.body, balance)
+        out = re.sub(self.pattern, replace_keys, template_body)
         
         # Преобразовать в JSON
         if self.jsonify:
