@@ -234,6 +234,11 @@ class Template(object):
 
     ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ В УПРАВЛЕНИЯ СТРОКАМИ ШАБЛОНА:
     keep_if -- сохранить строку между тегами условия если параметр True, иначе удалить
+    Например, для `{%% keep_if params %%}_KEEP_ME_OR_DELETE_ME_{%% end_keep_if %%}`
+        keep_if -- команда
+        params -- параметр
+        end_keep_if -- закрывающий тег
+        строка "_KEEP_ME_OR_DELETE_ME_" будет сохранена если params == True
     
     del_if -- сохранить строку между тегами условия если параметр True, иначе удалить
     """
@@ -322,11 +327,11 @@ class Template(object):
         
         self._body = body
 
-    def make(self, balance:dict):
+    def make(self, balance: dict):
         """
         Заполняет шаблон данными.
         ВАЖНО! Для сохранения в JSON необходимо заполнять все поля шаблона!
-        
+
         balance -- словарь (dict) с балансом (данными для подстановки), где:
             key - переменная, которую необходимо заменить
             value - значение для замены
@@ -342,74 +347,18 @@ class Template(object):
             Невозможно использовать переменные в подстроках.
         
         self.jsonify -- Забрать как словарь. False - по умолчанию, забирает как строку.
+
+        :param balance: Словарь с данными для подстановки в шаблон.
+        :return: Заполненный шаблон.
         """
 
-        def process_template(template_body, balance, pattern=None):
-            """
-            Обрабатывает содержимое файла, заменяя или удаляя строки на основе параметров.
-            Доступные команды:
-            keep_it [param] -- сохраняет строку если param == true, иначе удаляет
-            del_it [param] -- удаляет строку если param == true, иначе сохраняет
-            
-            :param template_body: Строка с содержимым файла.
-            :param data: Словарь с данными, используемыми для проверки флагов.
-            :param pattern: Регулярное выражение для поиска. Если не указано, используется стандартное.
-            :return: Обработанное содержимое файла.
-            """
-            if pattern is None:
-                # Дефолтные группы:
-                # 1. Команда (например, 'keep_if')
-                # 2. Флаг (например, 'custom_price_tiers_flag')
-                # 3. Строка шаблона ради которой всё и затевается
-                pattern = r'(\{%%\s*([\w_]+)\s+([\w_]+)\s*%%\}(.*?)\{%%\s*end_\2\s*%%\})'
-            
-            pattern = re.compile(pattern, re.DOTALL)
-            matches = pattern.findall(template_body)
-            
-            for match in matches:
-                full_match, command, params, content = match
-                if command not in self.strings_command_handlers:
-                    raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.strings_command_handlers.keys())}")
-
-                processed_content = self.strings_command_handlers[command](params, content, balance)
-                template_body = template_body.replace(full_match, processed_content)
-            
-            return template_body
-
-        def replace_keys(match):
-            # Заполняет шаблон значениями
-            # И обрабатывает команды в ключах
-            key_command_pair = match.group(1).split(self.command_letter)
-
-            # Ключ, который будет искаться для замены 
-            key = key_command_pair[0]
-
-            # Обработка ошибки отсутствия ключа
-            if key not in balance:
-                raise KeyError(f"Key '{key}' not found in balance.")
-            
-            insert_balance = balance[key]
-
-            # Команда ВСЕГДА идет после command_letter!
-            if self.command_letter in match.group(1):
-                command = key_command_pair[-1]
-
-                # Обработка ошибки отсутствия команды
-                if command not in self.key_command_handlers:
-                    raise ValueError(f"Key command '{command}' is not supported by Template class. Available only {list(self.key_command_handlers.keys())}")
-                insert_balance = self.key_command_handlers[command](insert_balance)
-
-            # Возвращаем строки как есть
-            if self.strip and isinstance(insert_balance, str):
-                return insert_balance
-
-            return json.dumps(insert_balance)
-
-
-        template_body = process_template(self.body, balance)
-        out = re.sub(self.pattern, replace_keys, template_body)
+        # Обрабатываем шаблон, заменяя или удаляя строки на основе параметров.
+        template_body = self._process_template(self.body, balance)
         
-        # Преобразовать в JSON
+        # Заменяем ключи в шаблоне на соответствующие значения из balance.
+        out = self._replace_keys(template_body, balance)
+        
+        # Преобразуем результат в JSON, если необходимо.
         if self.jsonify:
             try:
                 out = json.loads(out)
@@ -417,6 +366,93 @@ class Template(object):
                 raise ValueError(f"\nError during jsonify in {self.title}\n{str(e)}\n{out}")
 
         return out
+
+    def _process_template(self, template_body, balance):
+        """
+        Обрабатывает содержимое файла, заменяя или удаляя строки на основе параметров.
+        Доступные команды:
+        keep_it [param] -- сохраняет строку если param == true, иначе удаляет
+        del_it [param] -- удаляет строку если param == true, иначе сохраняет
+        
+        :param template_body: Содержимое файла.
+        :param balance: Словарь с данными для подстановки в шаблон.
+        :return: Обработанное содержимое файла.
+        """
+
+        # Регулярное выражение для поиска строковых команд в шаблоне.
+        pattern = r'(\{%%\s*([\w_]+)\s+([\w_]+)\s*%%\}(.*?)\{%%\s*end_\2\s*%%\})'
+        pattern = re.compile(pattern, re.DOTALL)
+        
+        # Находим все строки, содержащие команды.
+        matches = pattern.findall(template_body)
+        
+        # Обрабатываем каждую строку.
+        for match in matches:
+            full_match, command, params, content = match
+            
+            # Проверяем, что команда поддерживается.
+            if command not in self.strings_command_handlers:
+                raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.strings_command_handlers.keys())}")
+            
+            # Обрабатываем строку в соответствии с командой.
+            processed_content = self.strings_command_handlers[command](params, content, balance)
+            
+            # Заменяем исходную строку на обработанную.
+            template_body = template_body.replace(full_match, processed_content)
+        
+        return template_body
+
+    def _replace_keys(self, template_body, balance):
+        """
+        Заменяет ключи в шаблоне на соответствующие значения из balance.
+        
+        :param template_body: Содержимое файла.
+        :param balance: Словарь с данными для подстановки в шаблон.
+        :return: Содержимое файла с замененными ключами.
+        """
+
+        # Регулярное выражение для поиска ключей в шаблоне.
+        def replace_keys(match):
+            """
+            Заменяет ключ в шаблоне на соответствующее значение из balance.
+            
+            :param match: Сопоставление ключа в шаблоне.
+            :return: Замененное значение.
+            """
+
+            # Разделяем ключ и команду.
+            key_command_pair = match.group(1).split(self.command_letter)
+            
+            # Ключ, который необходимо заменить.
+            key = key_command_pair[0]
+            
+            # Проверяем, что ключ существует в balance.
+            if key not in balance:
+                raise KeyError(f"Key '{key}' not found in balance.")
+            
+            # Значение для замены ключа.
+            insert_balance = balance[key]
+            
+            # Если указана команда, обрабатываем значение.
+            if self.command_letter in match.group(1):
+                command = key_command_pair[-1]
+                
+                # Проверяем, что команда поддерживается.
+                if command not in self.key_command_handlers:
+                    raise ValueError(f"Key command '{command}' is not supported by Template class. Available only {list(self.key_command_handlers.keys())}")
+                
+                # Обрабатываем значение в соответствии с командой.
+                insert_balance = self.key_command_handlers[command](insert_balance)
+            
+            # Если необходимо, отрезаем лишние кавычки от строки.
+            if self.strip and isinstance(insert_balance, str):
+                return insert_balance
+            
+            # Возвращаем замененное значение.
+            return json.dumps(insert_balance)
+
+        # Заменяем ключи в шаблоне на соответствующие значения из balance.
+        return re.sub(self.pattern, replace_keys, template_body)
 
 
 class Page(object):
