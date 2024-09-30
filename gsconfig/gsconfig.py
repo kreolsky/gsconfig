@@ -115,8 +115,10 @@ def command_extract(array):
     """
     extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
 
-    Пример: По умолчанию парсер не разворачивает словари и они приходят вида [{'a': 1, 'b': 2}],
+    Пример: По умолчанию парсер v1 не разворачивает словари и они приходят вида [{'a': 1, 'b': 2}],
     если обязательно нужен словарь, то extract развернёт полученный список до {'a': 1, 'b': 2}
+    
+    ПРИМЕЧАНИЕ: парсер v2 всегда разворачивает словари по умолчанию
     """
     if len(array) == 1 and type(array) in (list, tuple):
         return array[0]
@@ -191,7 +193,7 @@ class Template(object):
 
     - path -- путь для файла шаблона  
     - body -- можно задать шаблон как строку
-    - pattern -- паттерн определения ключа в шаблоне. r'\{([a-z0-9_!]+)\}' - по умолчанию
+    - pattern -- паттерн определения ключей (переменных) в шаблоне. r'\{([a-z0-9_!]+)\}' - по умолчанию
     - command_letter -- символ отделяющий команду от ключа. '!' - по умолчанию
     - jsonify  -- Отдавать результат как словарь. False - по умолчанию (отдает как строку)
     - strip -- Будет ли отрезать от строк лишние кавычки. 
@@ -209,7 +211,7 @@ class Template(object):
     1. command_letter всегда должен быть включен в pattern
     2. ключ + команда в pattern всегда должены быть в первой группе регулярного выражения
 
-    ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ В КЛЮЧАХ ШАБЛОНА:
+    КОМАНДЫ В КЛЮЧАХ ШАБЛОНА:
     dummy -- Пустышка, ничего не длает.
 
     float -- Переводит в начения с плавающей запятой.
@@ -232,7 +234,7 @@ class Template(object):
     Например, в новостях мультиивентов поле "sns": {news_sns!string}.
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
 
-    ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ В УПРАВЛЕНИЯ СТРОКАМИ ШАБЛОНА:
+    КОМАНДЫ УПРАВЛЕНИЯ СТРОКАМИ ШАБЛОНА:
     keep_if -- сохранить строку между тегами условия если параметр True, иначе удалить
     Например, для `{%% keep_if params %%}_KEEP_ME_OR_DELETE_ME_{%% end_keep_if %%}`
         keep_if -- команда
@@ -265,14 +267,23 @@ class Template(object):
         self._body = body
         self._keys = []
 
+    def __str__(self):
+        return self.title
+
     @property
     def title(self) -> str:
         return os.path.basename(self.path)
 
     @property
-    def name(self) -> str:
-        return self.name_and_extension[0]
-    
+    def keys(self) -> list:
+        """
+        Возвращает все ключи используемые в шаблоне.
+        """
+
+        if not self._keys:
+            self._keys = re.findall(self.pattern, self.body)
+        return self._keys
+
     @property
     def body(self) -> str:
         """
@@ -292,23 +303,6 @@ class Template(object):
             raise FileNotFoundError(f"Template file '{self.path}' not found.")
         
         return self._body
-
-    @property
-    def keys(self) -> list:
-        """
-        Возвращает все ключи используемые в шаблоне.
-        """
-
-        if not self._keys:
-            self._keys = re.findall(self.pattern, self.body)
-        return self._keys
-
-    @property
-    def name_and_extension(self) -> dict:
-        return self.title.rsplit('.', 1)
-
-    def __str__(self):
-        return self.title
     
     def set_path(self, path=''):
         if not path:
@@ -352,13 +346,14 @@ class Template(object):
         :return: Заполненный шаблон.
         """
 
-        # Обрабатываем шаблон, заменяя или удаляя строки на основе параметров.
+        # Управление строками, обработка команд управления строками (strings_command_handlers)
         template_body = self._process_template(self.body, balance)
         
-        # Заменяем ключи в шаблоне на соответствующие значения из balance.
+        # Заполнение шаблона данными
+        # Заменяем ключи в шаблоне на соответствующие значения из balance
         out = self._replace_keys(template_body, balance)
         
-        # Преобразуем результат в JSON, если необходимо.
+        # Преобразуем результат в JSON, если необходимо
         if self.jsonify:
             try:
                 out = json.loads(out)
@@ -369,7 +364,7 @@ class Template(object):
 
     def _process_template(self, template_body, balance):
         """
-        Обрабатывает содержимое файла, заменяя или удаляя строки на основе параметров.
+        Управление строками, обработка команд управления строками (strings_command_handlers)
         Доступные команды:
         keep_it [param] -- сохраняет строку если param == true, иначе удаляет
         del_it [param] -- удаляет строку если param == true, иначе сохраняет
@@ -404,7 +399,7 @@ class Template(object):
 
     def _replace_keys(self, template_body, balance):
         """
-        Заменяет ключи в шаблоне на соответствующие значения из balance.
+        Заполнение шаблона данными. Заменяет ключи в шаблоне на соответствующие значения из balance.
         
         :param template_body: Содержимое файла.
         :param balance: Словарь с данными для подстановки в шаблон.
