@@ -1,11 +1,8 @@
 import json
 import csv
 import os
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 from . import gsconfig
-from . import gsparser
 
 
 def save_page(page, path=''):
