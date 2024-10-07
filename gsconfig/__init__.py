@@ -20,5 +20,5 @@ ConfigJSONConverter -- класс конвертора из промежуточ
 
 """
 
-__version__ = '0.7.3'
+__version__ = '0.7.4'
 __author__ = 'Serge Zaigraeff'

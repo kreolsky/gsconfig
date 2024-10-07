@@ -108,8 +108,7 @@ class Extractor:
         # Парсим данные в свободном формате
         out = []
         for line in data:
-            buffer = [f'{key} = {{{str(value)}}}' for key, value in zip(headers, line)]
-            buffer = parser.jsonify(', '.join(buffer))
+            buffer = {key: parser.jsonify(value) for key, value in zip(headers, line)}
             out.append(buffer)
 
         # Развернуть лишнюю вложенность когда только один элемент
