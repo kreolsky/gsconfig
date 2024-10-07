@@ -6,121 +6,7 @@ from functools import lru_cache
 
 from . import tools
 from . import gsparser
-
-
-"""
-Data extractors for Page class
-"""
-
-def filter_page_data(required_keys, page_data):
-    """
-    Фильтрует данные, оставляет только запрошенные столбцы и удаляет пустые строки.
-
-    :param required_keys: список ключей (заголовков), которые нужно оставить
-    :param page_data: двумерный массив (список списков)
-    :return: отфильтрованный двумерный массив
-    """
-
-    # Словарь индексов всех ключей (оптимизация скорости исполнения)
-    # Ключи (заголовки) всегда идут нулевой строкой (page_data[0])
-    header_to_index = {header: idx for idx, header in enumerate(page_data[0])}
-    indices = [header_to_index[h] for h in required_keys]
-
-    # Фильтрация данных по указанным индексам столбцов и удаление пустых строк
-    # Распаковывает на заголовки и данные
-    heades, *data = [
-        # Оставляем только указанные столбцы
-        [row[idx] for idx in indices] for row in page_data
-        # ... и непустые строки
-        if any(row[idx].strip() != '' for idx in indices)
-    ]
-    
-    return heades, data
-
-def extractor_dummy(page_data, **params):
-    return page_data
-
-def extractor_json(page_data, **params):
-    """
-    Парсит данные из гуглодоки в формат JSON. См. parser.jsonify
-    
-    Когда формат не указан - возвращает сырые данные как двумерный массив.
-
-    Понимает несколько схем компановки данных. Проверка по очереди:
-    1. Используется схема данных. См. Page.schema и Page.set_schema()
-    2. Свободный формат, первая строка - ключи, все последуюшие - данные соответствующие этим ключам
-
-    **params - все параметры доступные для парсера parser.jsonify
-    """
-
-    schema = params.get('schema')
-    key_skip_letters = params.get('key_skip_letters', [])
-
-    # Исходные заголовки импортируемых данных
-    headers_raw = page_data[0]
-
-    # Парсер конфигов в JSON
-    parser = gsparser.ConfigJSONConverter(params)
-
-    # Указана обычная схема (schema) хранения данных. Данные в несоклько колонок 
-    # schema = {'key': 'key', 'data': ('value_1', 'value_2'), 'default'='value_2'}, где 
-    # 'key' - название столбца с ключами 
-    # 'data' - кортеж названий столбцов с данными 
-    # 'default' - столбец с данными по умолчанию
-    if isinstance(schema, dict):
-        required_keys = [schema['key']] + list(schema['data'])
-        headers, data = filter_page_data(required_keys, page_data)
-
-        key_index = headers.index(schema['key'])  # Индекс столбца ключей
-        data_indices = [headers.index(x) for x in schema['data']]  # Индексы столбцов данных
-        
-        # Указать столбец с дефолтными данными. 
-        # Если в схеме default не указан, тогда дефолтным проходит значение первого столбца данных
-        # Из него буду взяты данные когда в соответствующих строках других столбцов пусто
-        default_data_key = schema.get('default', schema['data'][0])
-        default_data_index = headers.index(default_data_key)
-
-        out = {}
-        for data_index in data_indices:
-            bufer = {}
-            for line in data:                
-                # Если данные пустые, то брать из дефолтного столбца
-                line_data = line[data_index] or line[default_data_index]                
-                bufer[line[key_index]] = parser.jsonify(line_data)
-
-            out[headers[data_index]] = bufer
-
-        return out
-
-    # Простая схема данных. Документ из двух колонок schema = ('key', 'data'), где 
-    # 'key' - название столбца с ключами 
-    # 'data' - название столбца с данными 
-    # Схема -- кортеж и все элементы схемы представлены в заголовке
-    if isinstance(schema, tuple) and all(x in headers_raw for x in schema):
-        headers, data = filter_page_data(schema, page_data)
-
-        key_index = headers.index(schema[0])  # Столбец ключей
-        data_index = headers.index(schema[-1])  # Столбец данным
-
-        out = {row[key_index]: parser.jsonify(row[data_index]) for row in data}
-        return out
-
-    # Обычный документ, данные расположены строками
-    # Первая строка с заголовками, остальные строки с данными
-    required_keys = [key for key in headers_raw if not any(key.startswith(x) for x in key_skip_letters) and len(key) > 0]
-    headers, data = filter_page_data(required_keys, page_data)
-    
-    out = []
-    for line in data:
-        bufer = [f'{key} = {{{str(value)}}}' for key, value in zip(headers, line)]
-        bufer = parser.jsonify(', '.join(bufer))
-        out.append(bufer)
-
-    # Развернуть лишнюю вложенность когда только один элемент
-    if len(out) == 1:
-        return out[0]
-
-    return out
+from .extractor import Extractor
 
 """
 Classes
@@ -171,11 +57,7 @@ class Page(object):
         self._format = None
         self._cache = None
         self._name_and_format = None
-        self._extractors = {
-            'raw': extractor_dummy,
-            'csv': extractor_dummy,
-            'json': extractor_json
-        }
+        self._extractor = Extractor()
 
     @property
     def title(self):
@@ -220,7 +102,7 @@ class Page(object):
     def _calculate_name_and_format(self):
         name = self.title
         format = 'raw'
-        for parser_key in self._extractors.keys():
+        for parser_key in self._extractor.extractors.keys():
             if name.endswith(f'.{parser_key}'):
                 name = name[:-len(parser_key) - 1]
                 format = parser_key
@@ -259,7 +141,7 @@ class Page(object):
         """
         Задает схему формата данных в столбцах.
 
-        schema -- схема хранения данных в несколько колонок на странице.
+        schema -- схема хранения данных в несколько колонок на странице. см. Extractor()
 
         Упрощенная схема. Всегда указана по умолчанию. 
         Данные будут выгружены как словарь из пар в столбцах key = data
@@ -286,7 +168,7 @@ class Page(object):
         Принудительно задать формат для страницы. JSON по умолчанию
         """
 
-        available_formats = list(self._extractors.keys())
+        available_formats = list(self._extractor.extractors.keys())
         if format not in available_formats:
             raise ValueError(f'Available formats are {available_formats}')
 
@@ -319,7 +201,7 @@ class Page(object):
         params['key_skip_letters'] = params.get('key_skip_letters', self.key_skip_letters)
         params['parser_version'] = params.get('parser_version', self.parser_version)  # available version: v1, v2
 
-        return self._extractors[self.format](self._cache, **params)
+        return self._extractor.get(self._cache, self.format, **params)
     
     def save(self, path=''):
         """
