@@ -7,7 +7,7 @@ import re
 Template key command handlers
 """
 
-def command_extract(array):
+def key_command_extract(array):
     """
     extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
 
@@ -20,7 +20,7 @@ def command_extract(array):
         return array[0]
     return array
 
-def command_wrap(array):
+def key_command_wrap(array):
     """
     wrap -- Дополнительно заворачивает полученый список если первый элемент этого списка не является списком.
 
@@ -34,7 +34,7 @@ def command_wrap(array):
         return [array]
     return array
 
-def command_string(arg):
+def key_command_string(arg):
     """
     string -- Дополнительно заворачивает строку в кавычки. Все прочие типы данных оставляет как есть. Используется
     когда заранее неизвестно будет ли там значение и выбор между null и строкой.
@@ -58,7 +58,7 @@ class Template(object):
 
     - path -- путь для файла шаблона  
     - body -- можно задать шаблон как строку
-    - pattern -- паттерн определения ключей (переменных) в шаблоне. r'\{([a-z0-9_!]+)\}' - по умолчанию
+    - variable_pattern -- паттерн определения ключей (переменных) в шаблоне. r'\{%\s*([a-z0-9_!]+)\s*%\}' - по умолчанию. Пример: {% variable %}
     - command_letter -- символ отделяющий команду от ключа. '!' - по умолчанию
     - jsonify  -- Отдавать результат как словарь. False - по умолчанию (отдает как строку)
     - strip -- Будет ли отрезать от строк лишние кавычки. 
@@ -100,34 +100,36 @@ class Template(object):
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
 
     КОМАНДЫ УПРАВЛЕНИЯ СТРОКАМИ ШАБЛОНА:
-    keep_if -- сохранить строку между тегами условия если параметр True, иначе удалить
-    Например, для `{%% keep_if params %%}_KEEP_ME_OR_DELETE_ME_{%% end_keep_if %%}`
-        keep_if -- команда
+    if -- сохранить строку между тегами условия если параметр True, иначе удалить
+    Например, для `{% if params %} _KEEP_ME_OR_DELETE_ME_ {% endif %}`
+        if -- ключевое слово условия, открывающий тег
         params -- параметр
-        end_keep_if -- закрывающий тег
+        endif -- закрывающий тег
         строка "_KEEP_ME_OR_DELETE_ME_" будет сохранена если params == True
     
-    del_if -- сохранить строку между тегами условия если параметр True, иначе удалить
+    КОММЕНТАРИИ:
+    {# Комментариц в теле шаблона выглядит так #}
     """
 
-    def __init__(self, path='', body='', pattern=None, command_letter=None, strip=True, jsonify=False):
+    def __init__(self, path='', body='', pattern=None, strip=True, jsonify=False):
         self.path = path
-        self.pattern = pattern or r'\{([a-z0-9_!]+)\}'
-        self.command_letter = command_letter or '!'
+        self.variable_pattern = pattern or r'\{%\s*([a-z0-9_!]+)\s*%\}'
         self.strip = strip
         self.jsonify = jsonify
+        self.key_command_letter = '!'  # символ отделяющий команду от ключа
         self.key_command_handlers = {
             'dummy': lambda x: x,
             'float': lambda x: float(x),
             'int': lambda x: int(x),
             'json': lambda x: json.dumps(x),
-            'string': command_string,
-            'extract': command_extract,
-            'wrap': command_wrap
+            'string': key_command_string,
+            'extract': key_command_extract,
+            'wrap': key_command_wrap
         }
-        self.strings_command_handlers = {
-            'keep_if': lambda params, content, data: content if data.get(params) else '',
-            'del_if': lambda params, content, data: '' if data.get(params) else content
+        self.string_comment_pattern = r'\{\#\s*(.*?)\s*\#\}'
+        self.string_command_pattern = r'(\{%\s*([\w_]+)\s+([\w_]+)\s*%\}(.*?)\{%\s*end\2\s*%\})'
+        self.string_command_handlers = {
+            'if': lambda params, content, balance: content if balance.get(params) else '',
         }
         self._body = body
         self._keys = []
@@ -146,7 +148,7 @@ class Template(object):
         """
 
         if not self._keys:
-            self._keys = re.findall(self.pattern, self.body)
+            self._keys = re.findall(self.variable_pattern, self.body)
         return self._keys
 
     @property
@@ -186,7 +188,7 @@ class Template(object):
         
         self._body = body
 
-    def make(self, balance: dict):
+    def render(self, balance: dict):
         """
         Заполняет шаблон данными.
         ВАЖНО! Для сохранения в JSON необходимо заполнять все поля шаблона!
@@ -211,12 +213,15 @@ class Template(object):
         :return: Заполненный шаблон.
         """
 
+        # Обработка комментариев в теле шаблона
+        template_body = self._process_comments(self.body)
+
         # Управление строками, обработка команд управления строками (strings_command_handlers)
-        template_body = self._process_template(self.body, balance)
+        template_body = self._process_template(template_body, balance)
         
         # Заполнение шаблона данными
         # Заменяем ключи в шаблоне на соответствующие значения из balance
-        out = self._replace_keys(template_body, balance)
+        out = self._process_variables(template_body, balance)
         
         # Преобразуем результат в JSON, если необходимо
         if self.jsonify:
@@ -226,6 +231,24 @@ class Template(object):
                 raise ValueError(f"\nError during jsonify in {self.title}\n{str(e)}\n{out}")
 
         return out
+    
+    # Алиас для метода render для обеспечения обратно совместимости
+    make = render
+
+    def _process_comments(self, template_body):
+        """
+        Удаление комментариев из шаблона.
+        
+        :param template_body: Содержимое файла.
+        :return: Содержимое файла без комментариев.
+        """
+        # Регулярное выражение для поиска комментариев в шаблоне.
+        comment_pattern = re.compile(self.string_comment_pattern, re.DOTALL)
+        
+        # Удаляем все комментарии из шаблона.
+        template_body = comment_pattern.sub('', template_body)
+        
+        return template_body
 
     def _process_template(self, template_body, balance):
         """
@@ -240,29 +263,28 @@ class Template(object):
         """
 
         # Регулярное выражение для поиска строковых команд в шаблоне.
-        pattern = r'(\{%%\s*([\w_]+)\s+([\w_]+)\s*%%\}(.*?)\{%%\s*end_\2\s*%%\})'
-        pattern = re.compile(pattern, re.DOTALL)
+        string_command_pattern = re.compile(self.string_command_pattern, re.DOTALL)
         
         # Находим все строки, содержащие команды.
-        matches = pattern.findall(template_body)
+        matches = string_command_pattern.findall(template_body)
         
         # Обрабатываем каждую строку.
         for match in matches:
             full_match, command, params, content = match
             
             # Проверяем, что команда поддерживается.
-            if command not in self.strings_command_handlers:
-                raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.strings_command_handlers.keys())}")
+            if command not in self.string_command_handlers:
+                raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.string_command_handlers.keys())}")
             
             # Обрабатываем строку в соответствии с командой.
-            processed_content = self.strings_command_handlers[command](params, content, balance)
+            processed_content = self.string_command_handlers[command](params, content, balance)
             
             # Заменяем исходную строку на обработанную.
             template_body = template_body.replace(full_match, processed_content)
         
         return template_body
 
-    def _replace_keys(self, template_body, balance):
+    def _process_variables(self, template_body, balance):
         """
         Заполнение шаблона данными. Заменяет ключи в шаблоне на соответствующие значения из balance.
         
@@ -281,7 +303,7 @@ class Template(object):
             """
 
             # Разделяем ключ и команду.
-            key_command_pair = match.group(1).split(self.command_letter)
+            key_command_pair = match.group(1).split(self.key_command_letter)
             
             # Ключ, который необходимо заменить.
             key = key_command_pair[0]
@@ -294,10 +316,8 @@ class Template(object):
             insert_balance = balance[key]
             
             # Если указана команда, обрабатываем значение.
-            if self.command_letter in match.group(1):
+            if self.key_command_letter in match.group(1):
                 command = key_command_pair[-1]
-                
-                # Проверяем, что команда поддерживается.
                 if command not in self.key_command_handlers:
                     raise ValueError(f"Key command '{command}' is not supported by Template class. Available only {list(self.key_command_handlers.keys())}")
                 
@@ -312,5 +332,5 @@ class Template(object):
             return json.dumps(insert_balance)
 
         # Заменяем ключи в шаблоне на соответствующие значения из balance.
-        return re.sub(self.pattern, replace_keys, template_body)
+        return re.sub(self.variable_pattern, replace_keys, template_body)
 
