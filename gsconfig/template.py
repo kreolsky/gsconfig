@@ -7,7 +7,7 @@ import re
 Template key command handlers
 """
 
-def key_command_extract(array):
+def key_command_extract(array, *args, **kwargs):
     """
     extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
 
@@ -20,7 +20,7 @@ def key_command_extract(array):
         return array[0]
     return array
 
-def key_command_wrap(array):
+def key_command_wrap(array, *args, **kwargs):
     """
     wrap -- Дополнительно заворачивает полученый список если первый элемент этого списка не является списком.
 
@@ -34,7 +34,7 @@ def key_command_wrap(array):
         return [array]
     return array
 
-def key_command_string(arg):
+def key_command_string(string, *args, **kwargs):
     """
     string -- Дополнительно заворачивает строку в кавычки. Все прочие типы данных оставляет как есть. Используется
     когда заранее неизвестно будет ли там значение и выбор между null и строкой.
@@ -43,9 +43,33 @@ def key_command_string(arg):
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
     """
 
-    if type(arg) is str:
-        return f'"{arg}"'
-    return arg
+    if isinstance(string, str):
+        return f'"{string}"'
+    return string
+
+def key_command_get_by_index(array, command, **kwargs):
+    """
+    get_(-*\d+) -- Возвращает элемент из списка по указанному индексу.
+
+    Пример: Получен список [1, 2, 3], команда 'get_1' вернет 2, так как индексация начинается с 0.
+
+    :param array: Список, из которого нужно получить элемент.
+    :param command: Команда вида 'get_N', где N - индекс элемента.
+    :return: Элемент из списка по указанному индексу.
+    :raises TypeError: Если array не является списком или кортежем.
+    :raises IndexError: Если индекс выходит за пределы списка.
+    :raises ValueError: Если команда имеет неверный формат.
+    """
+    if not isinstance(array, (list, tuple)):
+        raise TypeError(f"Переданный объект {array} должен быть списком или кортежем.")
+
+    try:
+        idx = int(re.search(r'_(\d+)', command).group(1))
+        if idx >= len(array):
+            raise IndexError(f"Индекс {idx} выходит за пределы списка {array}. Всего элементов: {len(array)}")
+        return array[idx]
+    except AttributeError:
+        raise ValueError(f"Неверный формат команды '{command}'. Ожидается формат 'get_N', где N - индекс элемента.")
 
 """
 Classes
@@ -99,6 +123,10 @@ class Template(object):
     Например, в новостях мультиивентов поле "sns": {news_sns!string}.
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
 
+    get_N -- Берет элемент с индексом N из списка.
+    Пример: Получени список (допустимы только списки и кортежи) ['Zero', 'One', 'Two'] и команда get_2
+    Тогда будет подставлено значение  'Two'
+
     КОМАНДЫ УПРАВЛЕНИЯ СТРОКАМИ ШАБЛОНА:
     if -- сохранить строку между тегами условия если параметр True, иначе удалить
     Например, для `{% if params %} _KEEP_ME_OR_DELETE_ME_ {% endif %}`
@@ -108,7 +136,7 @@ class Template(object):
         строка "_KEEP_ME_OR_DELETE_ME_" будет сохранена если params == True
     
     КОММЕНТАРИИ:
-    {# Комментариц в теле шаблона выглядит так #}
+    {# Я комментарий в теле шаблона #}
     """
 
     def __init__(self, path='', body='', pattern=None, strip=True, jsonify=False):
@@ -118,17 +146,20 @@ class Template(object):
         self.jsonify = jsonify
         self.key_command_letter = '!'  # символ отделяющий команду от ключа
         self.key_command_handlers = {
-            'dummy': lambda x: x,
-            'float': lambda x: float(x),
-            'int': lambda x: int(x),
-            'json': lambda x: json.dumps(x),
-            'string': key_command_string,
-            'extract': key_command_extract,
-            'wrap': key_command_wrap
+            'dummy$': lambda x, *args, **kwargs: x,
+            'float$': lambda x, *args, **kwargs: float(x),
+            'int$': lambda x, *args, **kwargs: int(x),
+            'json$': lambda x, *args, **kwargs: json.dumps(x),
+            'string$': key_command_string,
+            'extract$': key_command_extract,
+            'wrap$': key_command_wrap,
+            'get_(\d+)$': key_command_get_by_index,
+            'extract_(\d+)$': key_command_get_by_index
         }
-        self.string_comment_pattern = r'\{\#\s*(.*?)\s*\#\}'
-        self.string_command_pattern = r'(\{%\s*([\w_]+)\s+([\w_]+)\s*%\}(.*?)\{%\s*end\2\s*%\})'
-        self.string_command_handlers = {
+        self.template_comment_pattern = r'\n?\{\#\s*(.*?)\s*\#\}'
+        self.template_command_pattern = r'(\n?\{%\s*([\w_]+)\s+([\w_]+)\s*%\}(.*?)\{%\s*end\2\s*%\}\n{0,1})'
+        # TODO: Добавить команды for с зарезервированной переменной $item
+        self.template_command_handlers = {
             'if': lambda params, content, balance: content if balance.get(params) else '',
         }
         self._body = body
@@ -243,7 +274,7 @@ class Template(object):
         :return: Содержимое файла без комментариев.
         """
         # Регулярное выражение для поиска комментариев в шаблоне.
-        comment_pattern = re.compile(self.string_comment_pattern, re.DOTALL)
+        comment_pattern = re.compile(self.template_comment_pattern, re.DOTALL)
         
         # Удаляем все комментарии из шаблона.
         template_body = comment_pattern.sub('', template_body)
@@ -263,21 +294,21 @@ class Template(object):
         """
 
         # Регулярное выражение для поиска строковых команд в шаблоне.
-        string_command_pattern = re.compile(self.string_command_pattern, re.DOTALL)
+        template_command_pattern = re.compile(self.template_command_pattern, re.DOTALL)
         
         # Находим все строки, содержащие команды.
-        matches = string_command_pattern.findall(template_body)
+        matches = template_command_pattern.findall(template_body)
         
         # Обрабатываем каждую строку.
         for match in matches:
             full_match, command, params, content = match
             
             # Проверяем, что команда поддерживается.
-            if command not in self.string_command_handlers:
-                raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.string_command_handlers.keys())}")
+            if command not in self.template_command_handlers:
+                raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.template_command_handlers.keys())}")
             
             # Обрабатываем строку в соответствии с командой.
-            processed_content = self.string_command_handlers[command](params, content, balance)
+            processed_content = self.template_command_handlers[command](params, content, balance)
             
             # Заменяем исходную строку на обработанную.
             template_body = template_body.replace(full_match, processed_content)
@@ -313,23 +344,28 @@ class Template(object):
                 raise KeyError(f"Key '{key}' not found in balance.")
             
             # Значение для замены ключа.
-            insert_balance = balance[key]
+            value_by_key = balance[key]
             
             # Если указана команда, обрабатываем значение.
             if self.key_command_letter in match.group(1):
                 command = key_command_pair[-1]
-                if command not in self.key_command_handlers:
+                # Перебираем совпадения команд в key_command_handlers регулярным выражением
+                # Это позволяет передавать параметр в команде
+                # Например: команда get_N берет значение по индексу N из списка
+                # TODO: Добавить конвеерную обработку команда когда задано несколько, например: list!get_1!string
+                for cmd, handler in self.key_command_handlers.items():
+                    if re.match(cmd, command):
+                        value_by_key = handler(value_by_key, command)
+                        break
+                else:
                     raise ValueError(f"Key command '{command}' is not supported by Template class. Available only {list(self.key_command_handlers.keys())}")
-                
-                # Обрабатываем значение в соответствии с командой.
-                insert_balance = self.key_command_handlers[command](insert_balance)
             
             # Если необходимо, отрезаем лишние кавычки от строки.
-            if self.strip and isinstance(insert_balance, str):
-                return insert_balance
+            if self.strip and isinstance(value_by_key, str):
+                return value_by_key
             
             # Возвращаем замененное значение.
-            return json.dumps(insert_balance)
+            return json.dumps(value_by_key)
 
         # Заменяем ключи в шаблоне на соответствующие значения из balance.
         return re.sub(self.variable_pattern, replace_keys, template_body)
