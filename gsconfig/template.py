@@ -42,7 +42,6 @@ def key_command_string(string, command):
 
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
     """
-
     if isinstance(string, str):
         return f'"{string}"'
     return string
@@ -50,6 +49,7 @@ def key_command_string(string, command):
 def key_command_get_by_index(array, command):
     """
     get_(\d+) -- Возвращает элемент из списка по указанному индексу.
+
     Пример: Получен список [1, 2, 3], команда 'get_1' вернет 2 (элемент под индексом 1)
 
     :param array: Список, из которого нужно получить элемент.
