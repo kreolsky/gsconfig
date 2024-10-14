@@ -7,7 +7,7 @@ import re
 Template key command handlers
 """
 
-def key_command_extract(array, *args, **kwargs):
+def key_command_extract(array, command):
     """
     extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
 
@@ -20,7 +20,7 @@ def key_command_extract(array, *args, **kwargs):
         return array[0]
     return array
 
-def key_command_wrap(array, *args, **kwargs):
+def key_command_wrap(array, command):
     """
     wrap -- Дополнительно заворачивает полученый список если первый элемент этого списка не является списком.
 
@@ -34,7 +34,7 @@ def key_command_wrap(array, *args, **kwargs):
         return [array]
     return array
 
-def key_command_string(string, *args, **kwargs):
+def key_command_string(string, command):
     """
     string -- Дополнительно заворачивает строку в кавычки. Все прочие типы данных оставляет как есть. Используется
     когда заранее неизвестно будет ли там значение и выбор между null и строкой.
@@ -47,11 +47,10 @@ def key_command_string(string, *args, **kwargs):
         return f'"{string}"'
     return string
 
-def key_command_get_by_index(array, command, **kwargs):
+def key_command_get_by_index(array, command):
     """
-    get_(-*\d+) -- Возвращает элемент из списка по указанному индексу.
-
-    Пример: Получен список [1, 2, 3], команда 'get_1' вернет 2, так как индексация начинается с 0.
+    get_(\d+) -- Возвращает элемент из списка по указанному индексу.
+    Пример: Получен список [1, 2, 3], команда 'get_1' вернет 2 (элемент под индексом 1)
 
     :param array: Список, из которого нужно получить элемент.
     :param command: Команда вида 'get_N', где N - индекс элемента.
@@ -146,10 +145,10 @@ class Template(object):
         self.jsonify = jsonify
         self.key_command_letter = '!'  # символ отделяющий команду от ключа
         self.key_command_handlers = {
-            'dummy$': lambda x, *args, **kwargs: x,
-            'float$': lambda x, *args, **kwargs: float(x),
-            'int$': lambda x, *args, **kwargs: int(x),
-            'json$': lambda x, *args, **kwargs: json.dumps(x),
+            'dummy$': lambda x, command: x,
+            'float$': lambda x, command: float(x),
+            'int$': lambda x, command: int(x),
+            'json$': lambda x, command: json.dumps(x),
             'string$': key_command_string,
             'extract$': key_command_extract,
             'wrap$': key_command_wrap,
@@ -346,7 +345,7 @@ class Template(object):
             
             # Конвеерная обработка команд
             # Например: для комбинации 'my_perfect_list!get_1!string'
-            # Сначала достаем 1й элемент из списка my_perfect_list потом переводим его в строку
+            # Достаем элемент под индексом 1 из списка my_perfect_list (!get_1) и переводим его в строку (!string)
             for command in key_commands_group[1:]:
                 # Перебираем совпадения команд в key_command_handlers регулярным выражением
                 # Это позволяет передавать параметр в команде
