@@ -9,8 +9,8 @@ class Extractor:
         self.extractors = {
             'json': self._extract_json,
             'csv': self._extract_dummy,  # Пример для csv, можно заменить на реальный парсер
-            'raw': self._extract_dummy,
-        }
+            'raw': self._extract_dummy
+            }
 
     def _filter_page_data(self, required_keys, page_data):
         """
@@ -28,9 +28,10 @@ class Extractor:
 
         # Фильтрация данных по указанным индексам столбцов и удаление пустых строк
         headers, *data = [
-            [row[idx] for idx in indices] for row in page_data
+            [row[idx] for idx in indices] 
+            for row in page_data
             if any(row[idx].strip() != '' for idx in indices)
-        ]
+            ]
         
         return headers, data
 
@@ -84,9 +85,9 @@ class Extractor:
         :return: отфильтрованный и преобразованный словарь
         """
         schema = {
-                    'key': schema[0],
-                    'data': [schema[-1]]
-                }
+            'key': schema[0],
+            'data': [schema[-1]]
+            }
 
         return self._parse_complex_schema(page_data, parser, schema)[schema['data'][0]]
 
@@ -102,7 +103,11 @@ class Extractor:
         
         # Определяем заголовки и фильтруем данные
         headers_raw = page_data[0]
-        required_keys = [key for key in headers_raw if not any(key.startswith(x) for x in key_skip_letters) and len(key) > 0]
+        required_keys = [
+            key for key in headers_raw
+            if not any(key.startswith(x) for x in key_skip_letters)
+            and len(key) > 0
+            ]
         headers, data = self._filter_page_data(required_keys, page_data)
 
         # Парсим данные в свободном формате

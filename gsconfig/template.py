@@ -245,14 +245,14 @@ class Template(object):
         """
 
         # Обработка комментариев в теле шаблона
-        template_body = self._process_comments(self.body)
+        template_body = self._process_template_comments(self.body)
 
         # Управление строками, обработка команд управления строками (strings_command_handlers)
-        template_body = self._process_template(template_body, balance)
+        template_body = self._process_template_commands(template_body, balance)
         
         # Заполнение шаблона данными
         # Заменяем ключи в шаблоне на соответствующие значения из balance
-        out = self._process_variables(template_body, balance)
+        out = self._process_key_commands(template_body, balance)
         
         # Преобразуем результат в JSON, если необходимо
         if self.jsonify:
@@ -266,7 +266,7 @@ class Template(object):
     # Алиас для метода render для обеспечения обратно совместимости
     make = render
 
-    def _process_comments(self, template_body):
+    def _process_template_comments(self, template_body):
         """
         Удаление комментариев из шаблона.
         
@@ -281,7 +281,7 @@ class Template(object):
         
         return template_body
 
-    def _process_template(self, template_body, balance):
+    def _process_template_commands(self, template_body, balance):
         """
         Управление строками, обработка команд управления строками (strings_command_handlers)
         Доступные команды:
@@ -315,7 +315,7 @@ class Template(object):
         
         return template_body
 
-    def _process_variables(self, template_body, balance):
+    def _process_key_commands(self, template_body, balance):
         """
         Заполнение шаблона данными. Заменяет ключи в шаблоне на соответствующие значения из balance.
         
@@ -333,26 +333,24 @@ class Template(object):
             :return: Замененное значение.
             """
 
-            # Разделяем ключ и команду.
-            key_command_pair = match.group(1).split(self.key_command_letter)
+            # Группа из ключа и списка команд которые к нему необходимо применить
+            key_commands_group = match.group(1).split(self.key_command_letter)
             
-            # Ключ, который необходимо заменить.
-            key = key_command_pair[0]
-            
-            # Проверяем, что ключ существует в balance.
+            # Ключ, который необходимо заменить
+            key = key_commands_group[0]
             if key not in balance:
                 raise KeyError(f"Key '{key}' not found in balance.")
             
-            # Значение для замены ключа.
+            # Значение для замены ключа
             value_by_key = balance[key]
             
-            # Если указана команда, обрабатываем значение.
-            if self.key_command_letter in match.group(1):
-                command = key_command_pair[-1]
+            # Конвеерная обработка команд
+            # Например: для комбинации 'my_perfect_list!get_1!string'
+            # Сначала достаем 1й элемент из списка my_perfect_list потом переводим его в строку
+            for command in key_commands_group[1:]:
                 # Перебираем совпадения команд в key_command_handlers регулярным выражением
                 # Это позволяет передавать параметр в команде
                 # Например: команда get_N берет значение по индексу N из списка
-                # TODO: Добавить конвеерную обработку команда когда задано несколько, например: list!get_1!string
                 for cmd, handler in self.key_command_handlers.items():
                     if re.match(cmd, command):
                         value_by_key = handler(value_by_key, command)
