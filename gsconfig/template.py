@@ -102,6 +102,16 @@ def template_command_comment(params, content, balance):
     """
     return ''
 
+def remove_trailing_comma(result):
+    """
+    Удаляет последнюю запятую из строки, если она присутствует.
+    
+    :param result: Строка, из которой необходимо удалить последнюю запятую.
+    :return: Строка без последней запятой.
+    """
+    if result.strip().endswith('},'):
+        return result.strip().strip(",")
+    return result
 
 def template_command_foreach(params, content, balance):
     """
@@ -132,10 +142,7 @@ def template_command_foreach(params, content, balance):
 
     # Отрезаем последнюю запятую, если она присутствует 
     # Странный костыль для JSON документа, последняя запятая обычно лишняя
-    if result.strip().endswith('},'):
-        result = result.strip().strip(",")
-
-    return result
+    return remove_trailing_comma(result)
 
 def template_command_for(params, content, balance):
     """
@@ -171,9 +178,9 @@ def template_command_for(params, content, balance):
         # Добавляем обработанное содержимое к результату
         result += processed_content.lstrip()
     
-    # Возвращаем результат
-    return result
-
+    # Отрезаем последнюю запятую, если она присутствует 
+    # Странный костыль для JSON документа, последняя запятая обычно лишняя
+    return remove_trailing_comma(result)
 
 """
 Classes
@@ -248,7 +255,7 @@ class Template(object):
     for -- Обрабатывает команду 'for' в шаблоне. Команда 'for' позволяет повторять содержимое между тегами 'for' и 'endfor' заданное количество раз.
         Количество повторений определяется значением ключа 'params' в словаре 'balance'.
         Внутри цикла доступна зарезервированная переменная $i, которая принимает значение текущего индекса итерации.
-        Шаблон: {% for cargo_9 %} индекс: #i {% endfor %}
+        Шаблон: {% for cargo_9 %} индекс: $i {% endfor %}
         Баланс: {'cargo_9': 3}
 
     КОММЕНТАРИИ:
