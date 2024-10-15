@@ -75,27 +75,47 @@ Template command handlers
 """
 
 def template_command_if(params, content, balance):
+    """
+    Обрабатывает команду 'if' в шаблоне.
+
+    Команда 'if' позволяет сохранить строку между тегами 'if' и 'endif' если параметр 'params' равен True, иначе удаляет.
+
+    :param params: Ключ, значение которого определяет условие сохранения строки.
+    :param content: Содержимое, которое необходимо сохранить или удалить.
+    :param balance: Словарь с данными для подстановки в шаблон.
+    :return: Строка, содержащая сохраненное содержимое если условие True, иначе пустая строка.
+    :raises KeyError: Если ключ 'params' не найден в словаре 'balance'.
+    """
     return content.lstrip() if balance.get(params) else ''
 
+
 def template_command_comment(params, content, balance):
+    """
+    Обрабатывает команду 'comment' в шаблоне.
+
+    Команда 'comment' позволяет удалить строку между тегами 'comment' и 'endcomment' независимо от значения параметра 'params'.
+
+    :param params: Ключ, значение которого не используется в данной команде.
+    :param content: Содержимое, которое необходимо удалить.
+    :param balance: Словарь с данными для подстановки в шаблон.
+    :return: Пустая строка.
+    """
     return ''
+
 
 def template_command_foreach(params, content, balance):
     """
-    Цикл. Повторяет content для каждого элемента из списка params.
-    $item - зарезервированная переменная для использования в content.
+    Обрабатывает команду 'foreach' в шаблоне.
 
-    Идем в цикле по balance[params]:
-    - В content заменяем $item на значение элемента списка.
-    - Состыковываем content.
-    - Возвращаем накопленное значение.
+    Команда 'foreach' позволяет повторять содержимое между тегами 'foreach' и 'endforeach' для каждого элемента из списка 'params'.
+    Внутри цикла доступна зарезервированная переменная $item, которая принимает значение текущего элемента списка.
 
-    :param params: Ключ по значению которого происходит итерация.
-    :param content: Строка, в которой заменяется $item на значение элемента списка.
+    :param params: Ключ, значение которого определяет список элементов для итерации.
+    :param content: Содержимое, которое необходимо повторить для каждого элемента списка.
     :param balance: Словарь с данными для подстановки в шаблон.
-    :return: Строка, содержащая накопленное значение после обработки всех элементов.
-    :raises KeyError: Если ключ params не найден в balance.
-    :raises TypeError: Если значение по ключу params не является списком.
+    :return: Строка, содержащая повторенное содержимое для каждого элемента списка.
+    :raises KeyError: Если ключ 'params' не найден в словаре 'balance'.
+    :raises TypeError: Если значение ключа 'params' не является списком.
     """
     if params not in balance:
         raise KeyError(f'Ключ "{params}" не найден в балансе')
@@ -109,8 +129,51 @@ def template_command_foreach(params, content, balance):
         # Заменяем $item на текущее значение элемента из списка
         processed_content = content.replace('$item', f'{params}!get_{i}')
         result += processed_content.lstrip()
-    
+
+    # Отрезаем последнюю запятую, если она присутствует 
+    # Странный костыль для JSON документа, последняя запятая обычно лишняя
+    if result.strip().endswith('},'):
+        result = result.strip().strip(",")
+
     return result
+
+def template_command_for(params, content, balance):
+    """
+    Обрабатывает команду 'for' в шаблоне.
+
+    Команда 'for' позволяет повторять содержимое между тегами 'for' и 'endfor' заданное количество раз.
+    Количество повторений определяется значением ключа 'params' в словаре 'balance'.
+
+    Внутри цикла доступна зарезервированная переменная $i, которая принимает значение текущего индекса итерации.
+    Например, если значение ключа 'params' равно 3, то переменная $i будет принимать значения 0, 1 и 2.
+
+    :param params: Ключ, значение которого определяет количество повторений.
+    :param content: Содержимое, которое необходимо повторить.
+    :param balance: Словарь с данными для подстановки в шаблон.
+    :return: Строка, содержащая повторенное содержимое.
+    :raises KeyError: Если ключ 'params' не найден в словаре 'balance'.
+    :raises TypeError: Если значение ключа 'params' не является целым числом.
+    """
+
+    # Проверяем, что ключ 'params' существует в словаре 'balance'
+    if params not in balance:
+        raise KeyError(f'Ключ "{params}" не найден в балансе')
+
+    # Проверяем, что значение ключа 'params' является целым числом
+    value = balance[params]
+    if not isinstance(value, int):
+        raise TypeError(f'Значение для "{params}" должно быть целым числом')
+
+    result = ''
+    for i in range(value):
+        # Заменяем '$i' на текущее значение элемента из списка
+        processed_content = content.replace('$i', f'{i}')
+        # Добавляем обработанное содержимое к результату
+        result += processed_content.lstrip()
+    
+    # Возвращаем результат
+    return result
+
 
 """
 Classes
@@ -142,21 +205,21 @@ class Template(object):
     2. ключ + команда в pattern всегда должены быть в первой группе регулярного выражения
 
     КОМАНДЫ В КЛЮЧАХ ШАБЛОНА:
-    dummy -- Пустышка, ничего не длает.
+    dummy -- Пустышка, ничего не делает.
 
-    float -- Переводит в начения с плавающей запятой.
+    float -- Переводит значение в число с плавающей запятой.
     Пример: Получено число 10, в шаблон оно будет записано как 10.0
 
-    int -- Переводит в целые значения отбрасыванием дробной части
+    int -- Переводит значение в целое число, отбрасывая дробную часть.
     Пример: Получено число 10.9, в шаблон оно будет записано как 10
 
-    json -- Сохраняет структура как JSON (применяет json.dumps())
+    json -- Сохраняет структуру как JSON (применяет json.dumps())
 
-    extract -- Вытаскивает элемент из списка (list or tuple) если это список единичной длины.
+    extract -- Вытаскивает элемент из списка (list или tuple) если это список единичной длины.
     Пример: По умолчанию парсер не разворачивает словари и они приходят вида [{'a': 1, 'b': 2}],
     если обязательно нужен словарь, то extract развернёт полученный список до {'a': 1, 'b': 2}
 
-    wrap -- Дополнительно заворачивает полученый список если первый элемент этого списка не является списком.
+    wrap -- Дополнительно заворачивает полученный список если первый элемент этого списка не является списком.
     Пример: Получен список [1, 2, 4], 1 - первый элемент, не список, тогда он дополнительно будет завернут [[1, 2, 4]].
 
     string -- Дополнительно заворачивает строку в кавычки. Все прочие типы данных оставляет как есть. 
@@ -165,24 +228,29 @@ class Template(object):
     Пример: Получена строка 'one,two,three', тогда она будет завернута в кавычки и станет '"one,two,three"'.
 
     get_N -- Берет элемент с индексом N из списка.
-    Пример: Получени список (допустимы только списки и кортежи) ['Zero', 'One', 'Two'] и команда get_2
+    Пример: Получен список (допустимы только списки и кортежи) ['Zero', 'One', 'Two'] и команда get_2
     Тогда будет подставлено значение  'Two'
 
+
     КОМАНДЫ УПРАВЛЕНИЯ СТРОКАМИ ШАБЛОНА:
-    if -- сохранить строку между тегами условия если параметр True, иначе удалить
-    Например, для `{% if params %} _KEEP_ME_OR_DELETE_ME_ {% endif %}`
-        if -- ключевое слово условия, открывающий тег
-        params -- параметр
-        endif -- закрывающий тег
-        строка "_KEEP_ME_OR_DELETE_ME_" будет сохранена если params == True
-    
-    comment -- многострочный комментарий. Работает как if с параметром False
-    
-    foreach -- экспериментальная реализация цикла. Пробегает по каждому элементу из params
-    Использует зарезервированную переменную $item для обозначения элемента списка. Поддерживает команды ключей.
-    Например, {% foreach list %}{% $item!string %}, {% endforeach %} 
-    для list = ('one', 'two', 'three') сделает последовательность '"one", "two", "three", '
-    
+    if -- Обрабатывает команду 'if' в шаблоне. Команда 'if' позволяет сохранить строку между тегами 'if' и 'endif' если параметр 'params' равен True, иначе удаляет.
+        Шаблон: {% if cargo_9 %} строка {% endif %}
+        Баланс: {'cargo_9': True}
+
+    comment -- Обрабатывает команду 'comment' в шаблоне. Команда 'comment' позволяет удалить строку между тегами 'comment' и 'endcomment' независимо от значения параметра 'params'.
+        Шаблон: {% comment %} строка {% endcomment %}
+
+    foreach -- Обрабатывает команду 'foreach' в шаблоне. Команда 'foreach' позволяет повторять содержимое между тегами 'foreach' и 'endforeach' для каждого элемента из списка 'params'.
+        Внутри цикла доступна зарезервированная переменная $item, которая принимает значение текущего элемента списка.
+        Шаблон: {% foreach cargo_9 %} элемент: #item {% endforeach %}
+        Баланс: {'cargo_9': ['item1', 'item2', 'item3']}
+
+    for -- Обрабатывает команду 'for' в шаблоне. Команда 'for' позволяет повторять содержимое между тегами 'for' и 'endfor' заданное количество раз.
+        Количество повторений определяется значением ключа 'params' в словаре 'balance'.
+        Внутри цикла доступна зарезервированная переменная $i, которая принимает значение текущего индекса итерации.
+        Шаблон: {% for cargo_9 %} индекс: #i {% endfor %}
+        Баланс: {'cargo_9': 3}
+
     КОММЕНТАРИИ:
     {# Я комментарий в теле шаблона #}
     """
@@ -210,6 +278,7 @@ class Template(object):
             'if': template_command_if,
             'comment': template_command_comment,
             'foreach': template_command_foreach,
+            'for': template_command_for
         }
         self._body = body
         self._keys = []
@@ -365,6 +434,34 @@ class Template(object):
         
         return template_body
 
+    def _process_key_commands_pipeline(self, value_by_key, key_commands):
+        """
+        Конвеерная обработка команд для значения ключа.
+        
+        :param value: Значение ключа.
+        :param key_commands: Список команд, которые необходимо применить к значению ключа.
+        :return: Обработанное значение ключа.
+        """
+
+        # Конвеерная обработка команд
+        for command in key_commands:
+            # Перебираем совпадения команд в key_command_handlers регулярным выражением
+            # Это позволяет передавать параметр в команде
+            for cmd, handler in self.key_command_handlers.items():
+                if re.match(cmd, command):
+                    value_by_key = handler(value_by_key, command)
+                    break
+            else:
+                available_commands = list(self.key_command_handlers.keys())
+                raise ValueError(f"Key command '{command}' is not supported. Available only {available_commands}")
+        
+        # Если необходимо, отрезаем лишние кавычки от строки
+        if self.strip and isinstance(value_by_key, str):
+            return value_by_key
+        
+        # Возвращаем замененное значение
+        return json.dumps(value_by_key)
+
     def _process_key_commands(self, template_body, balance):
         """
         Заполнение шаблона данными. Заменяет ключи в шаблоне на соответствующие значения из balance.
@@ -391,31 +488,13 @@ class Template(object):
             if key not in balance:
                 raise KeyError(f"Key '{key}' not found in balance.")
             
-            # Значение для замены ключа
             value_by_key = balance[key]
+            key_commands = key_commands_group[1:]
             
-            # Конвеерная обработка команд
-            # Например: для комбинации 'my_perfect_list!get_1!string'
-            # Достаем элемент под индексом 1 из списка my_perfect_list (!get_1) и переводим его в строку (!string)
-            for command in key_commands_group[1:]:
-                # Перебираем совпадения команд в key_command_handlers регулярным выражением
-                # Это позволяет передавать параметр в команде
-                # Например: команда get_N берет значение по индексу N из списка
-                for cmd, handler in self.key_command_handlers.items():
-                    if re.match(cmd, command):
-                        value_by_key = handler(value_by_key, command)
-                        break
-                else:
-                    available_commands = list(self.key_command_handlers.keys())
-                    raise ValueError(f"Key command '{command}' is not supported. Available only {available_commands}")
-            
-            # Если необходимо, отрезаем лишние кавычки от строки
-            if self.strip and isinstance(value_by_key, str):
-                return value_by_key
-            
-            # Возвращаем замененное значение
-            return json.dumps(value_by_key)
+            # Обрабатываем команды для значения ключа
+            return self._process_key_commands_pipeline(value_by_key, key_commands)
 
         # Заменяем ключи в шаблоне на соответствующие значения из balance
         return re.sub(self.variable_pattern, replace_keys, template_body)
+
 
