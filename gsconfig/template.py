@@ -106,7 +106,7 @@ def template_command_foreach(params, content, balance):
 
     result = ''
     for i, item in enumerate(items):
-        # Заменяем $item на текущее значение элемента списка в content
+        # Заменяем $item на текущее значение элемента из списка
         processed_content = content.replace('$item', f'{params}!get_{i}')
         result += processed_content.lstrip()
     
