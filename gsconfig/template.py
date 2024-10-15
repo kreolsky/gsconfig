@@ -4,7 +4,7 @@ import re
 
 
 """
-Template key command handlers
+Key command handlers
 """
 
 def key_command_extract(array, command):
@@ -71,6 +71,48 @@ def key_command_get_by_index(array, command):
         raise ValueError(f"Неверный формат команды '{command}'. Ожидается формат 'get_N', где N - индекс элемента.")
 
 """
+Template command handlers
+"""
+
+def template_command_if(params, content, balance):
+    return content.lstrip() if balance.get(params) else ''
+
+def template_command_comment(params, content, balance):
+    return ''
+
+def template_command_foreach(params, content, balance):
+    """
+    Цикл. Повторяет content для каждого элемента из списка params.
+    $item - зарезервированная переменная для использования в content.
+
+    Идем в цикле по balance[params]:
+    - В content заменяем $item на значение элемента списка.
+    - Состыковываем content.
+    - Возвращаем накопленное значение.
+
+    :param params: Ключ по значению которого происходит итерация.
+    :param content: Строка, в которой заменяется $item на значение элемента списка.
+    :param balance: Словарь с данными для подстановки в шаблон.
+    :return: Строка, содержащая накопленное значение после обработки всех элементов.
+    :raises KeyError: Если ключ params не найден в balance.
+    :raises TypeError: Если значение по ключу params не является списком.
+    """
+    if params not in balance:
+        raise KeyError(f'Ключ "{params}" не найден в балансе')
+
+    items = balance[params]
+    if not isinstance(items, (list, tuple)):
+        raise TypeError(f'Значение для "{params}" должно быть списком')
+
+    result = ''
+    for i, item in enumerate(items):
+        # Заменяем $item на текущее значение элемента списка в content
+        processed_content = content.replace('$item', f'{params}!get_{i}')
+        result += processed_content.lstrip()
+    
+    return result
+
+"""
 Classes
 """
 
@@ -134,6 +176,13 @@ class Template(object):
         endif -- закрывающий тег
         строка "_KEEP_ME_OR_DELETE_ME_" будет сохранена если params == True
     
+    comment -- многострочный комментарий. Работает как if с параметром False
+    
+    foreach -- экспериментальная реализация цикла. Пробегает по каждому элементу из params
+    Использует зарезервированную переменную $item для обозначения элемента списка. Поддерживает команды ключей.
+    Например, {% foreach list %}{% $item!string %}, {% endforeach %} 
+    для list = ('one', 'two', 'three') сделает последовательность '"one", "two", "three", '
+    
     КОММЕНТАРИИ:
     {# Я комментарий в теле шаблона #}
     """
@@ -155,11 +204,12 @@ class Template(object):
             'get_(\d+)$': key_command_get_by_index,
             'extract_(\d+)$': key_command_get_by_index
         }
-        self.template_comment_pattern = r'\n?\{\#\s*(.*?)\s*\#\}'
-        self.template_command_pattern = r'(\n?\{%\s*([\w_]+)\s+([\w_]+)\s*%\}(.*?)\{%\s*end\2\s*%\}\n{0,1})'
-        # TODO: Добавить команды for с зарезервированной переменной $item
+        self.template_comment_pattern = r'\{\#\s*(.*?)\s*\#\}\n{0,1}'
+        self.template_command_pattern = r'(\{%\s*([\w_]+)\s+([\w_]*)\s*%\}(.*?)\{%\s*end\2\s*%\}\n{0,1})'
         self.template_command_handlers = {
-            'if': lambda params, content, balance: content if balance.get(params) else '',
+            'if': template_command_if,
+            'comment': template_command_comment,
+            'foreach': template_command_foreach,
         }
         self._body = body
         self._keys = []
@@ -272,10 +322,10 @@ class Template(object):
         :param template_body: Содержимое файла.
         :return: Содержимое файла без комментариев.
         """
-        # Регулярное выражение для поиска комментариев в шаблоне.
+        # Регулярное выражение для поиска комментариев в шаблоне
         comment_pattern = re.compile(self.template_comment_pattern, re.DOTALL)
         
-        # Удаляем все комментарии из шаблона.
+        # Удаляем все комментарии из шаблона
         template_body = comment_pattern.sub('', template_body)
         
         return template_body
@@ -292,24 +342,25 @@ class Template(object):
         :return: Обработанное содержимое файла.
         """
 
-        # Регулярное выражение для поиска строковых команд в шаблоне.
+        # Регулярное выражение для поиска строковых команд в шаблоне
         template_command_pattern = re.compile(self.template_command_pattern, re.DOTALL)
         
-        # Находим все строки, содержащие команды.
+        # Находим все строки, содержащие команды
         matches = template_command_pattern.findall(template_body)
         
         # Обрабатываем каждую строку.
         for match in matches:
             full_match, command, params, content = match
             
-            # Проверяем, что команда поддерживается.
+            # Проверяем, что команда поддерживается
             if command not in self.template_command_handlers:
-                raise ValueError(f"String command '{command}' is not supported by Template class. Available only {list(self.template_command_handlers.keys())}")
+                available_commands = list(self.template_command_handlers.keys())
+                raise ValueError(f"Template command '{command}' is not supported. Available only {available_commands}")
             
-            # Обрабатываем строку в соответствии с командой.
+            # Обрабатываем строку в соответствии с командой
             processed_content = self.template_command_handlers[command](params, content, balance)
             
-            # Заменяем исходную строку на обработанную.
+            # Заменяем исходную строку на обработанную
             template_body = template_body.replace(full_match, processed_content)
         
         return template_body
@@ -323,7 +374,7 @@ class Template(object):
         :return: Содержимое файла с замененными ключами.
         """
 
-        # Регулярное выражение для поиска ключей в шаблоне.
+        # Регулярное выражение для поиска ключей в шаблоне
         def replace_keys(match):
             """
             Заменяет ключ в шаблоне на соответствующее значение из balance.
@@ -355,15 +406,16 @@ class Template(object):
                         value_by_key = handler(value_by_key, command)
                         break
                 else:
-                    raise ValueError(f"Key command '{command}' is not supported by Template class. Available only {list(self.key_command_handlers.keys())}")
+                    available_commands = list(self.key_command_handlers.keys())
+                    raise ValueError(f"Key command '{command}' is not supported. Available only {available_commands}")
             
-            # Если необходимо, отрезаем лишние кавычки от строки.
+            # Если необходимо, отрезаем лишние кавычки от строки
             if self.strip and isinstance(value_by_key, str):
                 return value_by_key
             
-            # Возвращаем замененное значение.
+            # Возвращаем замененное значение
             return json.dumps(value_by_key)
 
-        # Заменяем ключи в шаблоне на соответствующие значения из balance.
+        # Заменяем ключи в шаблоне на соответствующие значения из balance
         return re.sub(self.variable_pattern, replace_keys, template_body)
 
