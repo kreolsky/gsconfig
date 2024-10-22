@@ -136,8 +136,16 @@ def template_command_foreach(params, content, balance):
 
     result = ''
     for i, item in enumerate(items):
-        # Заменяем $item на текущее значение элемента из списка
-        processed_content = content.replace('$item', f'{params}!get_{i}')
+        if isinstance(item, (int, str)):
+            # Для строк и целых чисел это просто замена
+            # Используется как for для итерации по произвольному списку 
+            # Пример: {% freespins_payout_list!get_$item %}
+            processed_content = content.replace('$item', f'{item}')
+        else:
+            # Заменяем $item на текущее значение элемента из списка 
+            # Пример: {% $item!get_0!int %}
+            processed_content = content.replace('$item', f'{params}!get_{i}')
+        
         result += processed_content.lstrip()
 
     # Отрезаем последнюю запятую, если она присутствует 
