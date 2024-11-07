@@ -16,7 +16,7 @@ def key_command_extract(array, command):
     
     ПРИМЕЧАНИЕ: Актуально только для v1. Парсер v2 всегда разворачивает словари по умолчанию
     """
-    if len(array) == 1 and type(array) in (list, tuple):
+    if len(array) == 1 and isinstance(array, (list, tuple)):
         return array[0]
     return array
 
@@ -45,6 +45,16 @@ def key_command_string(string, command):
     if isinstance(string, str):
         return f'"{string}"'
     return string
+
+def key_command_none(element, command):
+    """
+    Возвращает None если пустой элемент. Иначе входящий элемент без изменения.
+    """
+
+    if str(element) == "":
+        return None
+
+    return element
 
 def key_command_get_by_index(array, command):
     """
@@ -289,6 +299,8 @@ class Template(object):
             'string$': key_command_string,
             'extract$': key_command_extract,
             'wrap$': key_command_wrap,
+            'none$': key_command_none,
+            'null$': key_command_none,
             'get_(\d+)$': key_command_get_by_index,
             'extract_(\d+)$': key_command_get_by_index
         }
