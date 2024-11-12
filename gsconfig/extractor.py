@@ -6,11 +6,17 @@ class Extractor:
     """
 
     def __init__(self):
+        # Набор экстракторов
         self.extractors = {
             'json': self._extract_json,
             'csv': self._extract_dummy,  # Пример для csv, можно заменить на реальный парсер
             'raw': self._extract_dummy
             }
+
+        # Данные из парсера, необходимы для корректной обработки команд в ключах
+        self._parser_sep = ''
+        self._parser_br_open = ''
+        self._parser_br_close = ''
 
     def _filter_page_data(self, required_keys, page_data):
         """
@@ -34,6 +40,20 @@ class Extractor:
             ]
         
         return headers, data
+
+    def _prepare_to_parser(self, key, value):
+        """
+        Собрает строку для парсера. Необходимо для корректно йобработки команд в ключах
+        Ключ должен попасть под пасер на общих словиях, тогда он будет корректно обработан
+
+        :param key: ключ
+        :param value: значение
+        :return: Строка готовая для корректного разбора парсером
+        """
+        # TODO: Сюда хорошо бы вставить проверку и запорачивать корректно. 
+        # Заворачивать нужно только в том случае, если удалось разделить строку по sep_block, sep_base или sep_dict
+        # Учитывая блоки используя parser.split_string_by_sep
+        return f'{key} {self._parser_sep} {self._parser_br_open}{value}{self._parser_br_close}'
 
     def _parse_complex_schema(self, page_data, parser, schema):
         """
@@ -66,7 +86,8 @@ class Extractor:
             buffer = {}
             for line in data:
                 line_data = line[data_index] or line[default_data_index]
-                buffer[line[key_index]] = parser.jsonify(line_data)
+                line_to_parse = self._prepare_to_parser(line[key_index], line_data)
+                buffer.update(parser.jsonify(line_to_parse))
             
             out[headers[data_index]] = buffer
 
@@ -113,7 +134,11 @@ class Extractor:
         # Парсим данные в свободном формате
         out = []
         for line in data:
-            buffer = {key: parser.jsonify(value) for key, value in zip(headers, line)}
+            buffer = {}
+            for key, value in zip(headers, line):
+                line_to_parse = self._prepare_to_parser(key, value)
+                buffer.update(parser.jsonify(line_to_parse))
+
             out.append(buffer)
 
         # Развернуть лишнюю вложенность когда только один элемент
@@ -138,7 +163,13 @@ class Extractor:
         schema = params.get('schema')
         key_skip_letters = params.get('key_skip_letters', [])
         parser = gsparser.ConfigJSONConverter(params)
-        
+
+        # Данные по структуре из парсера
+        # необходимы для корректного разбора команд ключей
+        self._parser_sep = parser.params['sep_dict']  # разделитель словаря
+        self._parser_br_open = parser.params['br_block'][0]  # открывающая скобка блока
+        self._parser_br_close = parser.params['br_block'][-1]  # закрывающая скобка блока
+
         # Парсим данные по обычной схеме
         if isinstance(schema, dict):
             return self._parse_complex_schema(page_data, parser, schema)

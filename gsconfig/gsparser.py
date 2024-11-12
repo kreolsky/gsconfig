@@ -99,8 +99,8 @@ class BlockParser:
     def __init__(self, params):
         self.params = params
         self.command_handlers = {
-            'list': lambda x: [x] if type(x) not in (list, tuple, ) else x,
-            'dlist': lambda x: [x] if type(x) in (dict, ) else x,
+            'list': lambda x: [x] if not isinstance(x, (list, tuple)) else x,
+            'dlist': lambda x: [x] if isinstance(x, dict) else x,
             'flist': lambda x: [x],
             'string': lambda x: str(x),
             'int': lambda x: int(x),
@@ -392,7 +392,7 @@ class ConfigJSONConverter:
         # Режем по символу блока sep_block
         for block in split_string_by_sep(string, self.params['sep_block'], **self.params):
             out.append(self.parser.parse_block(block, self))
-                       
+
         # Иначе каждый блок будет завернуть в лишний список (по механике создания out)
         return out[0] if len(out) == 1 else out
 
