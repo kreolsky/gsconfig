@@ -34,6 +34,14 @@ def key_command_wrap(array, command):
         return [array]
     return array
 
+def key_command_list(item, command):
+    """
+    List -- Если обьект не список, то заворачивает его в список.
+    """
+    if type(item) not in (list, tuple):
+        return [item]
+    return item
+
 def key_command_string(string, command):
     """
     string -- Дополнительно заворачивает строку в кавычки. Все прочие типы данных оставляет как есть. Используется
@@ -245,6 +253,8 @@ class Template(object):
 
     json -- Сохраняет структуру как JSON (применяет json.dumps())
 
+    list -- Заворачивает в список если это еще не список
+
     extract -- Вытаскивает элемент из списка (list или tuple) если это список единичной длины.
     Пример: По умолчанию парсер не разворачивает словари и они приходят вида [{'a': 1, 'b': 2}],
     если обязательно нужен словарь, то extract развернёт полученный список до {'a': 1, 'b': 2}
@@ -299,6 +309,7 @@ class Template(object):
             'string$': key_command_string,
             'extract$': key_command_extract,
             'wrap$': key_command_wrap,
+            'list$': key_command_list,
             'none$': key_command_none,
             'null$': key_command_none,
             'get_(\d+)$': key_command_get_by_index,
