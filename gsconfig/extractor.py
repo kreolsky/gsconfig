@@ -108,7 +108,7 @@ class Extractor:
         schema = {
             'key': schema[0],
             'data': [schema[-1]]
-            }
+        }
 
         return self._parse_complex_schema(page_data, parser, schema)[schema['data'][0]]
 
@@ -128,7 +128,7 @@ class Extractor:
             key for key in headers_raw
             if not any(key.startswith(x) for x in key_skip_letters)
             and len(key) > 0
-            ]
+        ]
         headers, data = self._filter_page_data(required_keys, page_data)
 
         # Парсим данные в свободном формате
@@ -159,7 +159,7 @@ class Extractor:
         **params - все параметры доступные для парсера parser.jsonify
         """
         
-        # Получаем параметры
+        # Получить параметры и создать обьект парсер из таблички
         schema = params.get('schema')
         key_skip_letters = params.get('key_skip_letters', [])
         parser = gsparser.ConfigJSONConverter(params)
