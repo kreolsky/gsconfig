@@ -1,5 +1,3 @@
-[ENGLISH](docs_en/README.md) | [RUSSIAN](docs_ru/README.md)
-
 # GSConfig Documentation
 
 GSConfig is a Python library that provides a convenient interface for working with game configurations stored in Google Sheets. Built on top of [gspread](https://docs.gspread.org/en/latest/). The library solves several key challenges:
@@ -20,12 +18,12 @@ GSConfig simplifies the game configuration development workflow, automates routi
 
 ## Table of Contents
 
-1. [Quick Start](docs_en/01-quick-start.md)
-2. [Core Abstractions](docs_en/02-core-abstractions.md)
-3. [Intermediate Format and Conversion](docs_en/03-intermediate-format.md)
-4. [Data Extraction and Schemas](docs_en/04-data-extraction.md)
-5. [Working with Templates](docs_en/05-working-with-templates.md)
-6. [Best Practices](docs_en/06-best-practices.md)
-7. [Custom Extensions](docs_en/07-custom-extensions.md)
-8. [Recipes and Examples](docs_en/08-recipes-and-examples.md)
-9. [API Reference](docs_en/09-api-reference.md)
+1. [Quick Start](01-quick-start.md)
+2. [Core Abstractions](02-core-abstractions.md)
+3. [Intermediate Format and Conversion](03-intermediate-format.md)
+4. [Data Extraction and Schemas](04-data-extraction.md)
+5. [Working with Templates](05-working-with-templates.md)
+6. [Best Practices](06-best-practices.md)
+7. [Custom Extensions](07-custom-extensions.md)
+8. [Recipes and Examples](08-recipes-and-examples.md)
+9. [API Reference](09-api-reference.md)
