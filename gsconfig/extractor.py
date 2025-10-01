@@ -43,7 +43,7 @@ class Extractor:
 
     def _prepare_to_parser(self, key, value):
         """
-        Собрает строку для парсера. Необходимо для корректно йобработки команд в ключах
+        Собрает строку для парсера. Необходимо для корректной обработки команд в ключах
         Ключ должен попасть под пасер на общих словиях, тогда он будет корректно обработан
 
         :param key: ключ
@@ -87,7 +87,14 @@ class Extractor:
             for line in data:
                 line_data = line[data_index] or line[default_data_index]
                 line_to_parse = self._prepare_to_parser(line[key_index], line_data)
-                buffer.update(parser.jsonify(line_to_parse))
+
+                try:
+                    buffer.update(parser.jsonify(line_to_parse))
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to parse line: '{line_to_parse}'\n"
+                        f"Error: {str(e)}"
+                    ) from e
             
             out[headers[data_index]] = buffer
 
@@ -137,7 +144,15 @@ class Extractor:
             buffer = {}
             for key, value in zip(headers, line):
                 line_to_parse = self._prepare_to_parser(key, value)
-                buffer.update(parser.jsonify(line_to_parse))
+                
+                try:
+                    buffer.update(parser.jsonify(line_to_parse))
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to parse line: '{line_to_parse}'\n"
+                        f"Error: {str(e)}"
+                    ) from e
+
 
             out.append(buffer)
 
