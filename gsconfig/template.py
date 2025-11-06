@@ -2,6 +2,8 @@ import os
 import json
 import re
 
+from .json_handler import JSONHandler
+
 
 """
 Key command handlers
@@ -65,7 +67,7 @@ def key_command_none(element, command):
     return element
 
 def key_command_get_by_index(array, command):
-    """
+    r"""
     get_(\d+) -- Возвращает элемент из списка по указанному индексу.
 
     Пример: Получен список [1, 2, 3], команда 'get_1' вернет 2 (элемент под индексом 1)
@@ -213,7 +215,7 @@ Classes
 """
 
 class Template(object):
-    """
+    r"""
     Класс шаблона из которого будет генериться конфиг.
     Паттерн ключа и символ отделяющий команду можно переопределить.
 
@@ -312,8 +314,8 @@ class Template(object):
             'list$': key_command_list,
             'none$': key_command_none,
             'null$': key_command_none,
-            'get_(\d+)$': key_command_get_by_index,
-            'extract_(\d+)$': key_command_get_by_index
+            r'get_(\d+)$': key_command_get_by_index,
+            r'extract_(\d+)$': key_command_get_by_index
         }
         self.template_comment_pattern = r'\{\#\s*(.*?)\s*\#\}\n{0,1}'
         self.template_command_pattern = r'(\{%\s*([\w_]+)\s+([\w_]*)\s*%\}(.*?)\{%\s*end\2\s*%\}\n{0,1})'
@@ -424,6 +426,21 @@ class Template(object):
 
         return out
     
+    def save(self, balance: dict, file_name: str, path: str = ''):
+        """
+        Сохраняет сгенерированный конфиг в JSON.
+
+        :param balance: Словарь с данными для подстановки в шаблон.
+        :param file_name: Имя файла для сохранения конфига.
+        :param path: Путь к директории для сохранения (по умолчанию текущая директория).
+        :return: Сгенерированный конфиг (словарь или строка в зависимости от jsonify).
+        """   
+     
+        config = self.render(balance)
+        JSONHandler.save(config, file_name, path)
+
+        return config
+
     # Алиас для метода render для обеспечения обратно совместимости
     make = render
 
