@@ -1,6 +1,6 @@
 import gspread
+
 import json
-from oauth2client.service_account import ServiceAccountCredentials
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
@@ -25,6 +25,8 @@ class GoogleOauth():
         https://github.com/burnash/gspread
         http://gspread.readthedocs.io/en/latest/
         """
+
+        from oauth2client.service_account import ServiceAccountCredentials
 
         if not self.keyfile: 
             return gspread.oauth()
