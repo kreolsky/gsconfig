@@ -106,7 +106,7 @@ class BlockParser:
             # и его первый элемент не является списком, то оно оборачивается в список еще раз.
             # Это обеспечивает, что вложенные списки, где первый элемент не является списком,
             # будут иметь дополнительный уровень вложенности.
-            'wrap': lambda x: [x] if isinstance(x, list) and not isinstance(x[0], list) else x,
+            'wrap': lambda x: [x] if isinstance(x, list) and not (x and isinstance(x[0], list)) else x,
             'string': lambda x: str(x),
             'int': lambda x: int(x),
             'float': lambda x: float(x),

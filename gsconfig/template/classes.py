@@ -137,18 +137,68 @@ class Template(object):
         'for': template_command_for
     }
 
+    """
+    Метаданные для управления рекурсивной обработкой команд шаблона
+    pre_process: выполнять рекурсивную обработку содержимого ДО вызова обработчика
+    post_process: выполнять рекурсивную обработку содержимого ПОСЛЕ вызова обработчика
+    
+    Подробное объяснение логики для каждой команды:
+    
+    1. if (pre_process: False, post_process: True)
+       Логика: Ленивая оптимизация. Содержимое обрабатывается только если условие истинно.
+       - pre_process=False: Не тратим ресурсы на обработку, если блок будет удален.
+       - post_process=True: Если условие истинно, рекурсивно обрабатываем вложенные команды.
+       Пример: {% if show_details %} {% foreach items %} $item {% endforeach %} {% endif %}
+       Если show_details=False, foreach вообще не будет обрабатываться.
+    
+    2. comment (pre_process: False, post_process: False)
+       Логика: Полное игнорирование содержимого для максимальной производительности.
+       - pre_process=False: Нет смысла анализировать содержимое комментария.
+       - post_process=False: Обработчик возвращает пустую строку, обрабатывать нечего.
+       Пример: {% comment %} {% foreach items %} $item {% endforeach %} {% endcomment %}
+       Всё содержимое удаляется без анализа.
+    
+    3. foreach (pre_process: False, post_process: False)
+       Логика: Избежание ошибок и переполнения стека при больших списках.
+       - pre_process=False: Переменная $item еще не заменена, обработка вызовет KeyError.
+       - post_process=False: Развернутый блок может быть огромным, глубокая рекурсия опасна.
+                          Вложенные команды будут найдены на следующей итерации внешнего while.
+       Пример: {% foreach items %} {% if $item.visible %} $item.name {% endif %} {% endforeach %}
+       Сначала foreach развернет блок, затем внешний цикл найдет и обработает if.
+    
+    4. for (pre_process: False, post_process: False)
+       Логика: Аналогично foreach - избежание ошибок с переменной $i и переполнения стека.
+       - pre_process=False: Переменная $i еще не заменена.
+       - post_process=False: Безопасная итеративная обработка вместо глубокой рекурсии.
+    """
+    
+    DEFAULT_TEMPLATE_COMMAND_METADATA = {
+        # Настройки по умолчанию для всех новых команд, если не указаны метаданные явно.
+        # Используется в register_template_command() и add_template_command() когда metadata=None.
+        # Логика: pre_process=False (не обрабатываем содержимое до handler),
+        #         post_process=True (обрабатываем результат после handler).
+        # Это поведение по умолчанию подходит для большинства команд, которые
+        # трансформируют содержимое, но не удаляют его полностью.
+        '_default': {'pre_process': False, 'post_process': True},
+        
+        'if': {'pre_process': False, 'post_process': True},
+        'comment': {'pre_process': False, 'post_process': False},
+        'foreach': {'pre_process': False, 'post_process': False},
+        'for': {'pre_process': False, 'post_process': False}
+    }
+
     def __init__(self, path='', body='', pattern=None, strip=True, jsonify=False):
         self.path = path
         self.variable_pattern = pattern or RE_VARIABLE_PATTERN
         self.strip = strip
         self.jsonify = jsonify
         self.key_command_letter = DEFAULT_COMMAND_LETTER  # символ отделяющий команду от ключа
-        # Create a copy of default handlers to allow per-instance customization
-        self.key_command_handlers = self.DEFAULT_KEY_COMMAND_HANDLERS.copy()
+        # Используем константы класса как базу для per-instance настройки
+        self.key_command_handlers = self.DEFAULT_KEY_COMMAND_HANDLERS
         self.template_comment_pattern = RE_COMMENT_PATTERN
         self.template_command_pattern = RE_TEMPLATE_COMMAND_PATTERN
-        # Create a copy of default handlers to allow per-instance customization
-        self.template_command_handlers = self.DEFAULT_TEMPLATE_COMMAND_HANDLERS.copy()
+        self.template_command_handlers = self.DEFAULT_TEMPLATE_COMMAND_HANDLERS
+        self.template_command_metadata = self.DEFAULT_TEMPLATE_COMMAND_METADATA
         self._body = body
         self._keys = []
 
@@ -165,16 +215,22 @@ class Template(object):
         cls.DEFAULT_KEY_COMMAND_HANDLERS[pattern] = handler
 
     @classmethod
-    def register_template_command(cls, name, handler):
+    def register_template_command(cls, name, handler, metadata=None):
         """
         Register a new template command handler at the class level.
         This will affect all new Template instances.
 
         :param name: Name of the template command (e.g., 'mycommand')
         :param handler: Function that takes (params, content, balance, key_command_handlers=None) and returns processed content
+        :param metadata: Optional dict with 'pre_process' and 'post_process' keys.
+                         If None, uses DEFAULT_TEMPLATE_COMMAND_METADATA['_default']
         :return: None
         """
         cls.DEFAULT_TEMPLATE_COMMAND_HANDLERS[name] = handler
+        if metadata is None:
+            # Use default metadata from the '_default' section
+            metadata = cls.DEFAULT_TEMPLATE_COMMAND_METADATA['_default'].copy()
+        cls.DEFAULT_TEMPLATE_COMMAND_METADATA[name] = metadata
 
     def add_key_command(self, pattern, handler):
         """
@@ -187,16 +243,22 @@ class Template(object):
         """
         self.key_command_handlers[pattern] = handler
 
-    def add_template_command(self, name, handler):
+    def add_template_command(self, name, handler, metadata=None):
         """
         Add a new template command handler to this specific Template instance.
         This does not affect other instances or the class defaults.
 
         :param name: Name of the template command (e.g., 'mycommand')
         :param handler: Function that takes (params, content, balance, key_command_handlers=None) and returns processed content
+        :param metadata: Optional dict with 'pre_process' and 'post_process' keys.
+                         If None, uses DEFAULT_TEMPLATE_COMMAND_METADATA['_default']
         :return: None
         """
         self.template_command_handlers[name] = handler
+        if metadata is None:
+            # Use default metadata from the '_default' section
+            metadata = self.DEFAULT_TEMPLATE_COMMAND_METADATA['_default'].copy()
+        self.template_command_metadata[name] = metadata
 
     def __str__(self):
         return self.title
@@ -332,9 +394,38 @@ class Template(object):
     def _process_template_commands(self, template_body, balance):
         """
         Управление строками, обработка команд управления строками (strings_command_handlers)
+        
         Доступные команды:
-        keep_it [param] -- сохраняет строку если param == true, иначе удаляет
-        del_it [param] -- удаляет строку если param == true, иначе сохраняет
+        - if [param] -- сохраняет содержимое если param == true, иначе удаляет
+        - comment -- удаляет содержимое независимо от значения параметра
+        - foreach [param] -- повторяет содержимое для каждого элемента из списка
+        - for [param] -- повторяет содержимое заданное количество раз
+        
+        Архитектура: Engine-driven recursion with minimal handlers
+        - Handlers are minimal and only transform content
+        - Engine controls all recursion based on command metadata
+        - Metadata defines pre-processing and post-processing behavior
+        
+        Логика работы механизма pre_process и post_process:
+        ---------------------------------------------------------
+        Метод работает в цикле while True, пока в тексте шаблона находятся команды.
+        Для каждой найденной команды выполняется следующая последовательность:
+        
+        1. Извлечение метаданных (pre_process, post_process) из template_command_metadata
+        2. Pre-processing (если True): Рекурсивный вызов для обработки содержимого ДО handler
+           - Используется редко, когда handler должен видеть уже обработанное содержимое
+        3. Вызов Handler: Трансформация содержимого (например, удаление или тиражирование)
+        4. Post-processing (если True): Рекурсивный вызов для обработки результата ПОСЛЕ handler
+           - Используется для "прозрачных" команд (if), которые оставляют содержимое
+        5. Замена блока в шаблоне на результат
+        
+        Важные особенности:
+        - Циклы (foreach, for) используют False/False для избежания ошибок с переменными ($item, $i)
+          и переполнения стека при больших списках. Вложенные команды обрабатываются на следующей
+          итерации внешнего цикла while.
+        - Условия (if) используют False/True для ленивой оптимизации - не тратим ресурсы на
+          обработку содержимого, которое будет удалено.
+        - Комментарии (comment) используют False/False для максимальной производительности.
         
         :param template_body: Содержимое файла.
         :param balance: Словарь с данными для подстановки в шаблон.
@@ -360,16 +451,24 @@ class Template(object):
                     available_commands = list(self.template_command_handlers.keys())
                     raise ValueError(f"Template command '{command}' is not supported. Available only {available_commands}")
                 
-                # Recursively process nested commands in content first
-                processed_content = self._process_template_commands(content, balance)
+                # Получаем метаданные для этой команды
+                metadata = self.template_command_metadata[command]
                 
-                # Then process the current command
-                # Pass key_command_handlers to all template command handlers for consistency
+                # Pre-processing: рекурсивно обрабатываем содержимое ДО вызова обработчика
+                if metadata.get('pre_process', False):
+                    content = self._process_template_commands(content, balance)
+                
+                # Вызываем обработчик команды с (возможно предварительно обработанным) содержимым
+                # Обработчики минимальны - они только трансформируют содержимое
                 processed_content = self.template_command_handlers[command](
-                    params, processed_content, balance, self.key_command_handlers
+                    params, content, balance, self.key_command_handlers
                 )
                 
-                # Replace in template_body
+                # Post-processing: рекурсивно обрабатываем содержимое ПОСЛЕ вызова обработчика
+                if metadata.get('post_process', True):
+                    processed_content = self._process_template_commands(processed_content, balance)
+                
+                # Заменяем в template_body
                 template_body = template_body.replace(full_match, processed_content)
         
         return template_body
