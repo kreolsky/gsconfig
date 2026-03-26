@@ -1003,6 +1003,19 @@
             [
                 "\"{0} made a <color=#B451E9>bet</color> {1}\"",
                 "{0} made a <color=#B451E9>bet</color> {1}"
+            ],
+            [
+                "{ 0, null, 1, [ { type = payout } ] }",
+                [
+                    0,
+                    null,
+                    1,
+                    [
+                        {
+                            "type": "payout"
+                        }
+                    ]
+                ]
             ]
         ]
     },
@@ -1949,6 +1962,19 @@
             [
                 "\"{0} made a <color=#B451E9>bet</color> {1}\"",
                 "{0} made a <color=#B451E9>bet</color> {1}"
+            ],
+            [
+                "{ 0, null, 1, [ { type = payout } ] }",
+                [
+                    0,
+                    null,
+                    1,
+                    [
+                        {
+                            "type": "payout"
+                        }
+                    ]
+                ]
             ]
         ]
     }

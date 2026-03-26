@@ -149,6 +149,16 @@ class BlockParser:
 
         out_dict[key] = self.command_handlers[command](result) if command else result
 
+    def parse_list(self, line, converter):
+        try:
+            result = ast.literal_eval(line)
+            if isinstance(result, list):
+                return result
+        except (ValueError, SyntaxError):
+            pass
+        result = converter.jsonify(line[1:-1])
+        return result if isinstance(result, list) else [result]
+
     def parse_string(self, line):
         return parse_string(line, self.params['to_num'])
 
@@ -161,6 +171,8 @@ class BlockParser:
             lambda line: line.startswith(self.params['raw_pattern']): lambda x: x[1:-1],
             # Начало блока (Начинается с открывающей скобки)
             lambda line: line.startswith(self.params['br_block'][0]): lambda x: converter.jsonify(x[1:-1]),
+            # Список (Начинается с открывающей квадратной скобки)
+            lambda line: line.startswith(self.params['br_list'][0]): lambda x: self.parse_list(x, converter),
             # Словарь (Внутри блока есть символ разделения словаря)
             lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, out_dict, converter),
         }
