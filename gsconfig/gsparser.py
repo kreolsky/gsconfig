@@ -6,6 +6,14 @@ import json
 Support functions
 """
 
+_STRING_MAPPING = {
+    'none': None,
+    'nan': None,
+    'null': None,
+    'true': True,
+    'false': False
+}
+
 def get_all_brackets(**params):
     """
     Возвращает все используемые в конверторе типы скобок.
@@ -20,19 +28,20 @@ def get_all_brackets(**params):
             brackets[value[-1]] = -1
     return brackets
 
-def define_split_points(string, sep, **params):
+def define_split_points(string, sep, brackets=None, **params):
     """
     Определяет точки в которых необходимо разрезать строку.
 
     string - исходная строка для разбора
     sep - разделитель. Пример: sep = '|'
+    brackets - опционально закешированный словарь скобок
     params - параметры с настройками класса конвертора
     
     Генератор. Возвращает порядковые номера символов.
     """
 
     raw_pattern = params.get('raw_pattern')
-    br = get_all_brackets(**params)
+    br = brackets if brackets is not None else get_all_brackets(**params)
 
     is_not_raw_block = True
     br_level = 0
@@ -49,20 +58,21 @@ def define_split_points(string, sep, **params):
 
     yield len(string)
 
-def split_string_by_sep(string, sep, **params):
+def split_string_by_sep(string, sep, brackets=None, **params):
     """
     Разделение строки на массив подстрок по символу разделителю. 
     Не разделяет блоки выделенные скобками.
 
     string - исходная строка для разбора
     sep - разделитель. Пример: sep = '|'
+    brackets - опционально закешированный словарь скобок
     params - параметры с настройками класса конвертора
 
     Генератор. Возвращает подстроки.
     """
 
     prev = 0
-    for i in define_split_points(string, sep, **params):
+    for i in define_split_points(string, sep, brackets=brackets, **params):
         yield string[prev:i].strip(sep).strip()
         prev = i
 
@@ -72,24 +82,20 @@ def parse_string(s, to_num=True):
     Переводит true\false в "правильный" формат для JSON
     """
 
-    string_mapping = {
-        'none': None,
-        'nan': None,
-        'null': None,
-        'true': True,
-        'false': False
-    }
-
-    if s.lower() in string_mapping:
-        return string_mapping[s.lower()]
+    s_lower = s.lower()
+    if s_lower in _STRING_MAPPING:
+        return _STRING_MAPPING[s_lower]
 
     if not to_num:
         return s
 
     try:
-        return ast.literal_eval(s)
-    except (ValueError, SyntaxError):
-        return s
+        return int(s)
+    except ValueError:
+        try:
+            return float(s)
+        except ValueError:
+            return s
 
 """
 Classes
@@ -98,6 +104,7 @@ Classes
 class BlockParser:
     def __init__(self, params):
         self.params = params
+        self._brackets = get_all_brackets(**params)
         self.command_handlers = {
             'list': lambda x: [x] if not isinstance(x, (list, tuple)) else x,
             'dlist': lambda x: [x] if isinstance(x, dict) else x,
@@ -127,7 +134,7 @@ class BlockParser:
         # По умолчанию команд нет
         command = None
 
-        key, substring = split_string_by_sep(line, self.params['sep_dict'], **self.params)
+        key, substring = split_string_by_sep(line, self.params['sep_dict'], brackets=self._brackets, **self.params)
         result = converter.jsonify(substring)
 
         # Обработка команд. Только для v2
@@ -177,7 +184,7 @@ class BlockParser:
             lambda line: self.params['sep_dict'] in line: lambda x: self.parse_dict(x, out_dict, converter),
         }
 
-        for line in split_string_by_sep(string, self.params['sep_base'], **self.params):
+        for line in split_string_by_sep(string, self.params['sep_base'], brackets=self._brackets, **self.params):
             for condition, action in condition_mapping.items():
                 if condition(line):
                     result = action(line)
@@ -375,9 +382,18 @@ class ConfigJSONConverter:
     """
 
     # Доступные версии парсера
-    AVAILABLE_VESRIONS = ('v1', 'v2')
+    AVAILABLE_VERSIONS = ('v1', 'v2')
+    AVAILABLE_VESRIONS = AVAILABLE_VERSIONS  # backward compat
 
-    def __init__(self, params={}):
+    @staticmethod
+    def validate_version(parser_version):
+        if parser_version not in ConfigJSONConverter.AVAILABLE_VERSIONS:
+            raise ValueError(
+                f'The version is not available. Available versions are: {ConfigJSONConverter.AVAILABLE_VERSIONS}'
+            )
+
+    def __init__(self, params=None):
+        params = params or {}
         self.default_params = {
             'br_list': '[]',
             'br_block': '{}',
@@ -409,7 +425,7 @@ class ConfigJSONConverter:
 
         out = []
         # Режем по символу блока sep_block
-        for block in split_string_by_sep(string, self.params['sep_block'], **self.params):
+        for block in split_string_by_sep(string, self.params['sep_block'], brackets=self.parser._brackets, **self.params):
             out.append(self.parser.parse_block(block, self))
 
         # Иначе каждый блок будет завернуть в лишний список (по механике создания out)

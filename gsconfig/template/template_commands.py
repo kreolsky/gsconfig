@@ -120,7 +120,7 @@ def template_command_foreach(params, content, balance, key_command_handlers=None
     if not isinstance(items, (list, tuple)):
         raise TypeError(f'Значение для "{params}" должно быть списком')
 
-    result = ''
+    parts = []
     for i, item in enumerate(items):
         if isinstance(item, (int, str)):
             # Для строк и целых чисел используем единую функцию обработки
@@ -132,11 +132,11 @@ def template_command_foreach(params, content, balance, key_command_handlers=None
             # Пример: {% $item!get_0!int %}
             processed_content = content.replace(VAR_ITEM, f'{params}!get_{i}')
 
-        result += processed_content.lstrip()
+        parts.append(processed_content.lstrip())
 
     # Отрезаем последнюю запятую, если она присутствует
     # Странный костыль для JSON документа, последняя запятая обычно лишняя
-    return remove_trailing_comma(result)
+    return remove_trailing_comma(''.join(parts))
 
 def template_command_for(params, content, balance, key_command_handlers=None):
     """
@@ -166,16 +166,15 @@ def template_command_for(params, content, balance, key_command_handlers=None):
     if not isinstance(value, int):
         raise TypeError(f'Значение для "{params}" должно быть целым числом')
 
-    result = ''
+    parts = []
     for i in range(value):
         # Используем единую функцию обработки для $i
         processed_content = process_special_variable_with_commands(
             content, VAR_INDEX, i, key_command_handlers
         )
 
-        # Добавляем обработанное содержимое к результату
-        result += processed_content.lstrip()
+        parts.append(processed_content.lstrip())
 
     # Отрезаем последнюю запятую, если она присутствует
     # Странный костыль для JSON документа, последняя запятая обычно лишняя
-    return remove_trailing_comma(result)
+    return remove_trailing_comma(''.join(parts))

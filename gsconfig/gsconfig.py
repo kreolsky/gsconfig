@@ -2,7 +2,6 @@ import gspread
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 
 from . import tools
 from . import gsparser
@@ -15,25 +14,30 @@ Classes
 class GoogleOauth():
     def __init__(self, keyfile=None) -> None:
         self.keyfile = keyfile
+        self._cached_client = None
 
     @property
-    @lru_cache(maxsize=1)
     def client(self):
         """
         Коннект к гуглотабличкам. См подробности в офф доке gspread
 
         https://github.com/burnash/gspread
-        http://gspread.readthedocs.io/en/latest/
+        http://gspread.readthedocs.org/en/latest/
         """
+
+        if self._cached_client is not None:
+            return self._cached_client
 
         from oauth2client.service_account import ServiceAccountCredentials
 
         if not self.keyfile: 
-            return gspread.oauth()
-        
-        scope = ['https://spreadsheets.google.com/feeds']
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(self.keyfile, scope)
-        return gspread.authorize(credentials)
+            self._cached_client = gspread.oauth()
+        else:
+            scope = ['https://spreadsheets.google.com/feeds']
+            credentials = ServiceAccountCredentials.from_json_keyfile_name(self.keyfile, scope)
+            self._cached_client = gspread.authorize(credentials)
+
+        return self._cached_client
 
 
 class GSConfigError(Exception):
@@ -112,7 +116,7 @@ class Page(object):
         self._name_and_format = {"name": name, "format": format}
 
     def __repr__(self):
-        return json.dumps(self.get(), ensure_ascii=False)
+        return f"<Page '{self.title}' format={self.format}>"
     
     def __iter__(self):
         yield from self.get()
@@ -131,12 +135,8 @@ class Page(object):
         """
         Указать версию парсера (конвертора из формата конфигов в JSON)
         """
-        
         # Взять версии парсера из обьекта парсера
-        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_VESRIONS
-        if parser_version not in available_versions:
-            raise ValueError(f'The version is not available. Available versions are: {available_versions}')
-
+        gsparser.ConfigJSONConverter.validate_version(parser_version)
         self.parser_version = parser_version
 
     def set_schema(self, schema):
@@ -204,7 +204,13 @@ class Page(object):
         params['parser_version'] = params.get('parser_version', self.parser_version)  # available version: v1, v2
 
         return self._extractor.get(self._cache, self.format, **params)
-    
+
+    def invalidate_cache(self):
+        """
+        Сбрасывает кеш данных страницы. Следующий вызов get() загрузит свежие данные.
+        """
+        self._cache = None
+
     def save(self, path=''):
         """
         Сохраняет страницу по указанному пути
@@ -224,6 +230,14 @@ class Document(object):
         self.key_skip_letters = set()
         self.parser_version = None
 
+    def _init_common(self, params):
+        params = params or {}
+        parser_version = params.get('parser_version', 'v1')
+        gsparser.ConfigJSONConverter.validate_version(parser_version)
+        self.page_skip_letters = params.get('page_skip_letters', {'#', '.'})
+        self.key_skip_letters = params.get('key_skip_letters', {'#', '.'})
+        self.parser_version = parser_version
+
     def __repr__(self):
         return f"<{self.__class__.__name__} '{self.spreadsheet.title}' id:{self.spreadsheet.id}>"
 
@@ -237,7 +251,7 @@ class Document(object):
         """
     
         for page in self.spreadsheet.worksheets():
-            if any([page.title.startswith(x) for x in self.page_skip_letters]):
+            if any(page.title.startswith(x) for x in self.page_skip_letters):
                 continue            
             yield self._create_page(page)
 
@@ -294,12 +308,8 @@ class Document(object):
         """
         Указать версию парсера (конвертора из формата конфигов в JSON)
         """
-        
         # Взять версии парсера из класса парсера
-        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_VESRIONS
-        if parser_version not in available_versions:
-            raise ValueError(f'The version is not available. Available versions are: {available_versions}')
-
+        gsparser.ConfigJSONConverter.validate_version(parser_version)
         self.parser_version = parser_version
 
     def save(self, path='', mode=''):
@@ -308,7 +318,7 @@ class Document(object):
         IMPORTANT! Working pages are usually not prepared for saving and will fail.
         """
 
-        pages = self.pages() if mode == 'full' else self
+        pages = self.pages if mode == 'full' else self
         for page in pages:
             page.save(path)
 
@@ -322,7 +332,7 @@ class GameConfigLite(Document):
     :param params: Дополнительные параметры конфигурации
     """
 
-    def __init__(self, spreadsheet_id: str, client=None, params: dict = {}):
+    def __init__(self, spreadsheet_id: str, client=None, params: dict = None):
         """
         Инициализация конфигурации игры
 
@@ -331,20 +341,21 @@ class GameConfigLite(Document):
         - key_skip_letters: набор символов для пропуска ключей (по умолчанию: {'#', '.'})
         - parser_version: версия парсера (доступны 'v1' и 'v2', по умолчанию: 'v1')
         """
+        params = params or {}
         self.client = client  # GoogleOauth object
         self.spreadsheet_id = spreadsheet_id  # Google Sheet ID
+        self._cached_spreadsheet = None
 
-        self.page_skip_letters = params.get('page_skip_letters', {'#', '.'})
-        self.key_skip_letters = params.get('key_skip_letters', {'#', '.'})
-        self.parser_version = params.get('parser_version', 'v1')  # TODO: добавить валидацию
+        self._init_common(params)
 
     @property
-    @lru_cache(maxsize=1)
     def spreadsheet(self) -> gspread.Spreadsheet:
         """
         Возвращает объект gspread.Spreadsheet
         """
-        return self.client.open_by_key(self.spreadsheet_id)
+        if self._cached_spreadsheet is None:
+            self._cached_spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+        return self._cached_spreadsheet
 
 
 class GameConfig(object):
@@ -360,7 +371,7 @@ class GameConfig(object):
     :param params: Дополнительные параметры конфигурации
     """
 
-    def __init__(self, spreadsheet_ids: list, client: GoogleOauth, params: dict = {}):
+    def __init__(self, spreadsheet_ids: list, client: GoogleOauth, params: dict = None):
         """
         Инициализация конфигурации игры
 
@@ -369,24 +380,25 @@ class GameConfig(object):
         - key_skip_letters: набор символов для пропуска ключей (по умолчанию: {'#', '.'})
         - parser_version: версия парсера (доступны 'v1' и 'v2', по умолчанию: 'v1')
         """
+        params = params or {}
         self.client = client  # GoogleOauth object
         self.spreadsheet_ids = spreadsheet_ids  # Config ids
 
-        self.page_skip_letters = params.get('page_skip_letters', {'#', '.'})
-        self.key_skip_letters = params.get('key_skip_letters', {'#', '.'})
-        self.parser_version = params.get('parser_version', 'v1')  # TODO: добавить валидацию
+        self._init_common(params)
 
         self._max_workers = 5
+        self._cached_documents = None
 
     @property
-    @lru_cache(maxsize=1)
     def documents(self) -> list:
-        with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
-            return list(pool.map(self._create_document, self.spreadsheet_ids))
+        if self._cached_documents is None:
+            with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
+                self._cached_documents = list(pool.map(self._create_document, self.spreadsheet_ids))
+        return self._cached_documents
     
     def __iter__(self):
         for document in self.documents:
-            yield(document)
+            yield document
     
     def __getitem__(self, title):
         result = next(filter(lambda x: x.title == title, self.documents), None)
@@ -407,12 +419,8 @@ class GameConfig(object):
         """
         Указать версию парсера (конвертора из формата конфигов в JSON)
         """
-        
         # Взять версии парсера из класса парсера
-        available_versions = gsparser.ConfigJSONConverter.AVAILABLE_VESRIONS
-        if parser_version not in available_versions:
-            raise ValueError(f'The version is not available. Available versions are: {available_versions}')
-
+        gsparser.ConfigJSONConverter.validate_version(parser_version)
         self.parser_version = parser_version
     
     def save(self, path='', mode=''):

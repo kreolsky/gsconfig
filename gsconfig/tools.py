@@ -3,6 +3,7 @@ import csv
 import os
 
 from . import gsconfig
+from .json_handler import JSONHandler
 
 
 def save_page(page, path=''):
@@ -39,17 +40,14 @@ def save_csv(data, title, path=''):
 
     check_folder_exists(path)
     with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
+        writer = csv.writer(file, quoting=csv.QUOTE_ALL)
         for line in data:
-            writer = csv.writer(file, quoting=csv.QUOTE_ALL)
             writer.writerow(line)
 
 def save_json(data, title, path=''):
     title = add_extension(title, 'json')
     data = convert_to_dict(data)
-    
-    check_folder_exists(path)
-    with open(os.path.join(path, title), 'w', encoding='utf-8') as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)
+    JSONHandler.save(data, title, path)
 
 def save_raw(data, title, path=''):
     check_folder_exists(path)
@@ -63,22 +61,18 @@ save_page_functions = {
 }
 
 def dict_to_str(source, tab='', count=0):
-    output = ''
-
     if not isinstance(source, dict):
         return source
 
+    parts = []
     for key, value in source.items():
-        end = ''
         if isinstance(value, dict):
-            count += 1
-            value = dict_to_str(value, ' ' * 4, count)
-            end = '\n'
-            count -= 1
+            value = dict_to_str(value, ' ' * 4, count + 1)
+            parts.append(f'{tab * count}{str(key)}: \n{str(value)}\n')
+        else:
+            parts.append(f'{tab * count}{str(key)}: {str(value)}\n')
 
-        output += f'{tab * count}{str(key)}: {end}{str(value)}\n'
-
-    return output[:-1]
+    return ''.join(parts)[:-1]
 
 def load_json(filename, path=''):
     file_path = os.path.join(path, filename)

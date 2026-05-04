@@ -22,5 +22,5 @@ JSONHandler -- класс для работы с JSON. Чуть более ак�
 
 """
 
-__version__ = '0.16.0'
+__version__ = '0.16.1'
 __author__ = 'Serge Zaigraeff'

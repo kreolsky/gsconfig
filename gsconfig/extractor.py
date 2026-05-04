@@ -13,10 +13,15 @@ class Extractor:
             'raw': self._extract_dummy
             }
 
-        # Данные из парсера, необходимы для корректной обработки команд в ключах
-        self._parser_sep = ''
-        self._parser_br_open = ''
-        self._parser_br_close = ''
+        self._cached_parser = None
+        self._cached_parser_params_key = None
+
+    def _get_parser(self, params):
+        params_key = str(sorted(params.items()))
+        if self._cached_parser is None or self._cached_parser_params_key != params_key:
+            self._cached_parser = gsparser.ConfigJSONConverter(params)
+            self._cached_parser_params_key = params_key
+        return self._cached_parser
 
     def _filter_page_data(self, required_keys, page_data):
         """
@@ -34,39 +39,44 @@ class Extractor:
 
         # Фильтрация данных по указанным индексам столбцов и удаление пустых строк
         headers, *data = [
-            [row[idx] for idx in indices] 
+            [row[idx] for idx in indices]
             for row in page_data
             if any(row[idx].strip() != '' for idx in indices)
             ]
-        
+
         return headers, data
 
-    def _prepare_to_parser(self, key, value):
+    @staticmethod
+    def _prepare_to_parser(key, value, parser_params):
         """
         Собрает строку для парсера. Необходимо для корректной обработки команд в ключах
         Ключ должен попасть под пасер на общих словиях, тогда он будет корректно обработан
 
         :param key: ключ
         :param value: значение
+        :param parser_params: параметры парсера (dict)
         :return: Строка готовая для корректного разбора парсером
         """
-        # TODO: Сюда хорошо бы вставить проверку и запорачивать корректно. 
+        # TODO: Сюда хорошо бы вставить проверку и запорачивать корректно.
         # Заворачивать нужно только в том случае, если удалось разделить строку по sep_block, sep_base или sep_dict
         # Учитывая блоки используя parser.split_string_by_sep
-        return f'{key} {self._parser_sep} {self._parser_br_open}{value}{self._parser_br_close}'
+        sep = parser_params['sep_dict']
+        br_open = parser_params['br_block'][0]
+        br_close = parser_params['br_block'][-1]
+        return f'{key} {sep} {br_open}{value}{br_close}'
 
     def _parse_complex_schema(self, page_data, parser, schema):
         """
         Парсит данные по обычной схеме, где есть несколько столбцов с данными.
-        
-        gsconfig.set_schema()       
+
+        gsconfig.set_schema()
 
         :param page_data: двумерный массив (список списков)
         :param parser: объект парсера
         :param schema: словарь схемы данных
         :return: отфильтрованный и преобразованный словарь
         """
-        
+
         # Определяем необходимые ключи и фильтруем данные
         required_keys = [schema['key']] + list(schema['data'])
         headers, data = self._filter_page_data(required_keys, page_data)
@@ -81,12 +91,13 @@ class Extractor:
         default_data_index = headers.index(default_key)
 
         # Парсим данные по схеме
+        parser_params = parser.params
         out = {}
         for data_index in data_indices:
             buffer = {}
             for line in data:
                 line_data = line[data_index] or line[default_data_index]
-                line_to_parse = self._prepare_to_parser(line[key_index], line_data)
+                line_to_parse = self._prepare_to_parser(line[key_index], line_data, parser_params)
 
                 try:
                     buffer.update(parser.jsonify(line_to_parse))
@@ -95,16 +106,16 @@ class Extractor:
                         f"Failed to parse line: '{line_to_parse}'\n"
                         f"Error: {str(e)}"
                     ) from e
-            
+
             out[headers[data_index]] = buffer
 
         return out
-    
+
     def _parse_simple_schema(self, page_data, parser, schema):
         """
         Парсит данные по простой схеме, где только один столбец с данными.
         Для разбора используется как частный случай self._parse_complex_schema
-        
+
         См. gsconfig.set_schema()
 
         :param page_data: двумерный массив (список списков)
@@ -128,7 +139,7 @@ class Extractor:
         :param key_skip_letters: символы для пропуска ключей
         :return: отфильтрованный и преобразованный список
         """
-        
+
         # Определяем заголовки и фильтруем данные
         headers_raw = page_data[0]
         required_keys = [
@@ -139,12 +150,13 @@ class Extractor:
         headers, data = self._filter_page_data(required_keys, page_data)
 
         # Парсим данные в свободном формате
+        parser_params = parser.params
         out = []
         for line in data:
             buffer = {}
             for key, value in zip(headers, line):
-                line_to_parse = self._prepare_to_parser(key, value)
-                
+                line_to_parse = self._prepare_to_parser(key, value, parser_params)
+
                 try:
                     buffer.update(parser.jsonify(line_to_parse))
                 except Exception as e:
@@ -152,7 +164,6 @@ class Extractor:
                         f"Failed to parse line: '{line_to_parse}'\n"
                         f"Error: {str(e)}"
                     ) from e
-
 
             out.append(buffer)
 
@@ -173,26 +184,20 @@ class Extractor:
 
         **params - все параметры доступные для парсера parser.jsonify
         """
-        
+
         # Получить параметры и создать обьект парсер из таблички
         schema = params.get('schema')
         key_skip_letters = params.get('key_skip_letters', [])
-        parser = gsparser.ConfigJSONConverter(params)
-
-        # Данные по структуре из парсера
-        # необходимы для корректного разбора команд ключей
-        self._parser_sep = parser.params['sep_dict']  # разделитель словаря
-        self._parser_br_open = parser.params['br_block'][0]  # открывающая скобка блока
-        self._parser_br_close = parser.params['br_block'][-1]  # закрывающая скобка блока
+        parser = self._get_parser(params)
 
         # Парсим данные по обычной схеме
         if isinstance(schema, dict):
             return self._parse_complex_schema(page_data, parser, schema)
-        
+
         # Парсинг по простой схеме
         if isinstance(schema, tuple) and all(x in page_data[0] for x in schema):
             return self._parse_simple_schema(page_data, parser, schema)
-        
+
         # Обработка в свободном формате когда нет схемы
         return self._parse_free_format(page_data, parser, key_skip_letters)
 

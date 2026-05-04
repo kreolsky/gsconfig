@@ -194,11 +194,13 @@ class Template(object):
         self.jsonify = jsonify
         self.key_command_letter = DEFAULT_COMMAND_LETTER  # символ отделяющий команду от ключа
         # Используем константы класса как базу для per-instance настройки
-        self.key_command_handlers = self.DEFAULT_KEY_COMMAND_HANDLERS
+        self.key_command_handlers = self.DEFAULT_KEY_COMMAND_HANDLERS.copy()
         self.template_comment_pattern = RE_COMMENT_PATTERN
         self.template_command_pattern = RE_TEMPLATE_COMMAND_PATTERN
-        self.template_command_handlers = self.DEFAULT_TEMPLATE_COMMAND_HANDLERS
-        self.template_command_metadata = self.DEFAULT_TEMPLATE_COMMAND_METADATA
+        self.template_command_handlers = self.DEFAULT_TEMPLATE_COMMAND_HANDLERS.copy()
+        self.template_command_metadata = self.DEFAULT_TEMPLATE_COMMAND_METADATA.copy()
+        self._compiled_comment_pattern = re.compile(self.template_comment_pattern, re.DOTALL)
+        self._compiled_command_pattern = re.compile(self.template_command_pattern, re.DOTALL)
         self._body = body
         self._keys = []
 
@@ -384,7 +386,7 @@ class Template(object):
         :return: Содержимое файла без комментариев.
         """
         # Регулярное выражение для поиска комментариев в шаблоне
-        comment_pattern = re.compile(self.template_comment_pattern, re.DOTALL)
+        comment_pattern = self._compiled_comment_pattern
         
         # Удаляем все комментарии из шаблона
         template_body = comment_pattern.sub('', template_body)
@@ -433,7 +435,7 @@ class Template(object):
         """
 
         # Регулярное выражение для поиска строковых команд в шаблоне
-        template_command_pattern = re.compile(self.template_command_pattern, re.DOTALL)
+        template_command_pattern = self._compiled_command_pattern
         
         # Keep processing until no more commands are found
         while True:
@@ -469,7 +471,7 @@ class Template(object):
                     processed_content = self._process_template_commands(processed_content, balance)
                 
                 # Заменяем в template_body
-                template_body = template_body.replace(full_match, processed_content)
+                template_body = template_body.replace(full_match, processed_content, 1)
         
         return template_body
 
