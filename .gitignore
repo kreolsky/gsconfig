@@ -1,6 +1,7 @@
 __pycache__
 .DS_Store
-.claude
+.claude/settings.local.json
+.claude/scripts/__pycache__/
 build
 dist
 gsconfig.egg-info
@@ -8,3 +9,9 @@ google_oauth2_token.json
 pen_sample*
 _pen_sample*
 json
+.kilo
+.ruff_cache
+.pytest_cache
+
+# Superseded plan drafts (local post-mortem material, pruned after 30 days)
+plans/superseded/

@@ -1,3 +1,4 @@
+# SYSTEM: extractor — page format dispatch (json/csv/raw) and data schemas (simple, complex, free)
 from . import gsparser
 
 class Extractor:

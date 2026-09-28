@@ -1,0 +1,66 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import ast; print\\(ast.literal_eval\\(''[0, [8]]''\\)\\)\")",
+      "Bash(python3:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(~/.miniconda3/bin/python -m pytest:*)",
+      "Bash(bash .claude/scripts/pre-commit-gates.sh)",
+      "Bash(.claude/scripts/pre-commit-gates.sh)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(ls -t plans/*.md)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/hook-guard.py pre-bash" },
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/plan-snapshot.py" }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/hook-guard.py pre-edit" },
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/plan-snapshot.py" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/hook-guard.py post-bash" }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/save-plan.py" }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/hook-guard.py post-edit" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cd \"$CLAUDE_PROJECT_DIR\"; echo \"=== Git Status ===\"; git status --short; echo; echo \"=== Recent Commits ===\"; git log --oneline -5; git fetch origin --quiet 2>/dev/null; BEHIND=$(git log HEAD..origin/dev --oneline 2>/dev/null); if [ -n \"$BEHIND\" ]; then echo; echo \"=== WARNING: behind origin/dev ===\"; echo \"$BEHIND\"; fi'"
+          }
+        ]
+      }
+    ]
+  }
+}

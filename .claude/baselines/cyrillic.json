@@ -1,0 +1,12 @@
+{
+  "gsconfig/__init__.py": 6,
+  "gsconfig/extractor.py": 60,
+  "gsconfig/gsconfig.py": 59,
+  "gsconfig/gsparser.py": 108,
+  "gsconfig/json_handler.py": 48,
+  "gsconfig/template/classes.py": 178,
+  "gsconfig/template/constants.py": 3,
+  "gsconfig/template/key_commands.py": 27,
+  "gsconfig/template/template_commands.py": 51,
+  "gsconfig/tools.py": 3
+}

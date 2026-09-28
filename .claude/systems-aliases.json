@@ -1,0 +1,11 @@
+{
+  "package-api": ["публичный api", "экспорт", "версия", "__version__"],
+  "sheets-access": ["гуглодока", "таблица", "страница", "документ", "gspread", "авторизация", "oauth", "page", "document", "gameconfig"],
+  "extractor": ["схема", "schema", "формат страницы", "json/csv/raw", "извлечение данных"],
+  "converter": ["парсер", "промежуточный формат", "jsonify", "конвертор", "parser_version", "v1", "v2"],
+  "template-engine": ["шаблон", "template", "рендер", "render", "подстановка"],
+  "key-commands": ["команды ключей", "!float", "!int", "!list", "extract", "wrap", "get_N"],
+  "template-commands": ["if", "foreach", "for", "comment", "$item", "$i", "циклы шаблона"],
+  "json-output": ["сохранение json", "форматирование json", "dumps", "JSONHandler"],
+  "file-io": ["сохранение", "save_page", "tools", "csv"]
+}

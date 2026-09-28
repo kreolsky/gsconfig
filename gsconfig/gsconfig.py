@@ -1,3 +1,4 @@
+# SYSTEM: sheets-access — GoogleOauth, Page/Document wrappers over gspread, GameConfigLite/GameConfig
 import gspread
 
 import json

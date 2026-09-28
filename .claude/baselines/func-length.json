@@ -1,0 +1,15 @@
+{
+  "limit": 50,
+  "scan_dir": "gsconfig",
+  "total": 2,
+  "violations": {
+    "gsconfig/json_handler.py::JSONHandler.dumps": {
+      "label": "gsconfig/json_handler.py::JSONHandler.dumps",
+      "span": 86
+    },
+    "gsconfig/template/classes.py::Template._process_template_commands": {
+      "label": "gsconfig/template/classes.py::Template._process_template_commands",
+      "span": 81
+    }
+  }
+}

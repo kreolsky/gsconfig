@@ -1,3 +1,4 @@
+# SYSTEM: package-api — public exports and __version__ (read by setup.py)
 from .gsconfig import GoogleOauth
 from .template import Template
 from .gsconfig import GameConfigLite

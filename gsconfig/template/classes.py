@@ -1,3 +1,4 @@
+# SYSTEM: template-engine — Template load, variable substitution, command dispatch, render
 """
 Classes
 """

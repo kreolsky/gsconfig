@@ -1,3 +1,4 @@
+# SYSTEM: template-commands — if/comment/foreach/for blocks and $item/$i
 """
 Template command handlers
 """

@@ -1,3 +1,4 @@
+# SYSTEM: key-commands — `!command` value transforms applied to template variables
 """
 Key command handlers
 """

@@ -1,3 +1,4 @@
+# SYSTEM: json-output — game-config-friendly JSON dumps (inline numeric lists)
 
 import os
 import json

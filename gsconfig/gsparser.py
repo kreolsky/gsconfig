@@ -1,3 +1,4 @@
+# SYSTEM: converter — intermediate format to JSON (ConfigJSONConverter, parser v1/v2)
 import ast
 import json
 
