@@ -6,9 +6,9 @@ or ok. The version LEVEL, the note text and the push stay the operator's call �
 only gathers the evidence they are decided from, against the repo, never memory.
 
 A release of this library = `__version__` in `gsconfig/__init__.py` (read by setup.py)
-+ annotated tag `vX.Y.Z` on the same SHA + fast-forward `master`. The tag push is what
-triggers the PyPI publish workflow, so a tag whose version disagrees with `__version__`
-would publish a package under the wrong number — hence the version checks here.
++ annotated tag `vX.Y.Z` on the same SHA + fast-forward `master`. Users install by tag
+(`pip install git+…@vX.Y.Z`), so a tag whose version disagrees with `__version__`
+ships a package under the wrong number — hence the version checks here.
 
 Usage: release-audit.py [--fetch]      (--fetch runs `git fetch origin --tags` first)
 Exit 1 if any check is STOP.

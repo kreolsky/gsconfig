@@ -5,10 +5,6 @@ import re
 import sys
 from setuptools import setup, find_packages
 
-if sys.argv[-1] == 'publish':
-    os.system('python setup.py sdist bdist_wheel')
-    sys.exit()
-
 def read(filename):
     return open(os.path.join(os.path.dirname(__file__), filename)).read()
 

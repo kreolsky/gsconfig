@@ -16,7 +16,7 @@ matching edit). One concept = one file; pointers, not restatement.
 - **`coding-constraints.md`** — stdlib + gspread, public API, deletion test, layer
   consumers, surgical changes, size limits, symbol-removal audits, anti-mirage.
 - **`git-strategy.md`** — S/M straight to `dev`; branch only for L; release via `/release`
-  (tag push = PyPI publish); English-only commit messages.
+  (tag + ff `master`); English-only commit messages.
 - **`testing.md`** — golden cases are never edited to pass, v1 + v2 always, compare via
   `json.dumps`, reports are user scenarios.
 - **`subagent-contract.md`** — return-card format for Agent-tool dispatches and `/review`.
@@ -69,7 +69,7 @@ Pin the rules in a `pyproject.toml`, fix or baseline, then add it to the gates.
 - `/tdd` — TDD initialization.  `/review` — post-implementation self-review.
 - `/run-tests` — full pytest suite (golden converter cases v1/v2 + templates).
 - `/merge` — pre-merge audit + merge an L branch into `dev`.
-- `/release` — version bump, note, tag, ff `master`, PyPI publish via CI.
+- `/release` — version bump, note, tag, ff `master`.
 - `/retro` — session retrospective and lesson capture.
 - **Audits, three different questions** — `/intent-audit` (markers vs code) ·
   `/liveness-audit` (is this layer reachable from a root) · `/reality-audit` (prose in

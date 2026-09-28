@@ -63,7 +63,7 @@ enumerate the affected file paths.
   and plan defects are RULED ON, logged as `Ruling: <what> — <why> — <cost if wrong>`, and
   execution continues. Four things still stop it: an irreversible or destructive operation,
   a change to output that existing spreadsheets/templates already rely on (see Hard rules),
-  a side effect outside this tree (merge, push, tag, PyPI publish, a write to a Google
+  a side effect outside this tree (merge, push, tag, a write to a Google
   Sheet), and a plan where every path forward is a guess. Run tests after each logical
   step; commands in `.claude/rules-scoped/testing-ops.md`. Add markers
   (`documentation.md`); regenerate `SYSTEMS.md` if a `SYSTEM:` marker changed.
@@ -200,7 +200,7 @@ Flow: complete work → `/review` → findings + fix plan → wait for approval 
 
 **A lesson is written only when something WENT WRONG.** Create
 `lessons/YYYY-MM-DD-short-slug.md` when ANY holds: 3+ fix iterations on the same issue
-category; a released defect (reached PyPI past a green `/review`) — name which check
+category; a released defect (reached a `v*` tag past a green `/review`) — name which check
 missed it; a wrong hypothesis that cost real time; the user explicitly asks for one.
 
 NOT triggers: a new pattern, a clean feature, a workflow tweak, a first-try fix.

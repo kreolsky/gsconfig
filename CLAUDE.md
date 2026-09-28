@@ -1,6 +1,6 @@
 # GSConfig — Project Bible
 
-Python library (PyPI: `gsconfig`) for game configs kept in Google Sheets: reads worksheets
+Python library (`gsconfig`, installed from git — not on PyPI) for game configs kept in Google Sheets: reads worksheets
 through gspread, converts a compact spreadsheet syntax (the *intermediate format*) to JSON,
 and renders config files from templates.
 
@@ -13,8 +13,10 @@ and renders config files from templates.
 * **Runtime dependency**: `gspread` (declared); `oauth2client` (lazy, service-account path
   only, NOT declared)
 * **Testing**: pytest, offline — `tests/` (commands: `.claude/rules-scoped/testing-ops.md`)
-* **Packaging**: `setup.py` + `__version__` in `gsconfig/__init__.py`; published to PyPI by
-  `.github/workflows/publish-to-pypi.yml` on a `v*` tag push (the `/release` skill)
+* **Packaging**: `setup.py` + `__version__` in `gsconfig/__init__.py`; not published to
+  PyPI (the name `gsconfig` there is another project). Install:
+  `pip install git+https://github.com/kreolsky/gsconfig@vX.Y.Z`. CI
+  (`.github/workflows/tests.yml`) runs `tests/` on push to `dev`/`master`
 * **Branches**: work on `dev`; `master` = released
 
 ## Core Systems

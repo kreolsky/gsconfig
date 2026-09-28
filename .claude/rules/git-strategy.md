@@ -13,9 +13,8 @@ alwaysApply: true
   are legacy branches — never a base, never deleted without an explicit ask.)
 * **Pre-merge audit**: `/merge` (`merge-audit.py`), then explicit confirmation.
 * **Release**: only via `/release`, only when the user asks. It tags `vX.Y.Z` and
-  fast-forwards `master` (`git push origin <sha>:refs/heads/master`). The tag push is what
-  publishes to PyPI (`.github/workflows/publish-to-pypi.yml`) — a tag is irreversible in
-  practice, since PyPI never accepts the same version twice. Never create a local merge
+  fast-forwards `master` (`git push origin <sha>:refs/heads/master`). A pushed tag is what users
+  pin (`pip install git+…@vX.Y.Z`) — never move or reuse one. Never create a local merge
   commit on `master`.
 * **Clean up**: delete feature branches after merge into `dev`, on an explicit yes.
 * **Foreign working-tree changes stay untouched.** Never revert, stash, `git checkout --`,

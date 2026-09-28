@@ -4,7 +4,7 @@
 Reads the hook payload as JSON on stdin (the Claude Code hook contract: `tool_name`,
 `tool_input`, `session_id`). Modes, one per settings.json entry:
 
-  pre-bash    block destructive commands; warn on a tag push (publishes to PyPI); run
+  pre-bash    block destructive commands; warn on a tag push; run
               pre-commit-gates.sh before `git commit`
   pre-edit    once per session per rule file: point at the matching .claude/rules-scoped/
   post-bash   after `git commit`: the /retro trigger reminder
@@ -30,8 +30,6 @@ BLOCKS = [
      "rm -rf is destructive. Use targeted removal."),
     (re.compile(r"\bgit\s+push\s+(-f|--force)\b.*\b(master|dev)\b|\bgit\s+push\b.*\+\S*(master|dev)\b"),
      "force push to master/dev."),
-    (re.compile(r"\btwine\s+upload\b"),
-     "manual PyPI upload — releases go through /release (tag push → CI publish)."),
 ]
 TAG_PUSH = re.compile(r"\bgit\s+push\b.*(refs/tags/|--tags\b|\bv\d+\.\d+\.\d+\b)")
 COMMIT = re.compile(r"\bgit\s+commit\b")
@@ -66,7 +64,7 @@ def pre_bash(cmd: str) -> None:
         if pattern.search(cmd):
             block(reason)
     if TAG_PUSH.search(cmd):
-        message("Pushing a v* tag publishes to PyPI (irreversible for that version). "
+        message("Pushing a v* tag publishes a release users pin (never move or reuse it). "
                 "Only from /release §4, after the pre-flight and the version check.")
     if COMMIT.search(cmd):
         gates = subprocess.run(["bash", str(ROOT / ".claude/scripts/pre-commit-gates.sh")],

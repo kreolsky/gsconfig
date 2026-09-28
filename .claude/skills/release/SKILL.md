@@ -1,14 +1,14 @@
 ---
 name: release
-description: Bump the version, tag vX.Y.Z, fast-forward dev into master and publish gsconfig to PyPI. Релиз, выпусти версию, опубликуй в PyPI, мерж dev в master, новая версия, bump version, release, publish.
+description: Bump the version, tag vX.Y.Z, fast-forward dev into master. Релиз, выпусти версию, мерж dev в master, новая версия, bump version, release.
 ---
 
 # Release — `__version__` bump, tag `vX.Y.Z`, fast-forward `dev` → `master`
 
 A release = version bump + release note on `dev` + annotated tag `vX.Y.Z` on that SHA +
-fast-forward of `origin/master`. **Pushing the tag publishes to PyPI**
-(`.github/workflows/publish-to-pypi.yml`), and PyPI never accepts the same version twice —
-the tag push is the point of no return.
+fast-forward of `origin/master`. The library is not on PyPI; users
+install by tag (`pip install git+https://github.com/kreolsky/gsconfig@vX.Y.Z`), so a pushed
+tag is never moved or reused — the tag push is the point of no return.
 
 **Invoking this skill IS the operator's go-ahead for the tag and both pushes.** The
 operator is asked exactly one thing, the version level (§2). The only other halts: a `STOP`
@@ -68,12 +68,11 @@ git tag -a "$VER" "$REL" -m "Release $VER — $(date +%F)
 
 See docs/release/release-$(date +%F)-$VER.md"
 git push origin "$REL:refs/heads/master"
-git push origin "refs/tags/$VER"                           # triggers the PyPI publish
+git push origin "refs/tags/$VER"                           # the release users pin
 git rev-parse "$VER^{}" origin/master                      # both lines are $REL
 ```
 
 ## 5. Output
 
 Version (and any overridden recommendation), note path, commit count, the new
-`origin/master` SHA, and the publish run: `gh run list --workflow publish-to-pypi.yml -L 1`.
-A failed publish is reported with its log — the tag stays; the fix ships as the next patch.
+`origin/master` SHA, and the install line `pip install git+https://github.com/kreolsky/gsconfig@vX.Y.Z`.
