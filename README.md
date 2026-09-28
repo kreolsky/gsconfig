@@ -17,7 +17,7 @@ pip install git+https://github.com/kreolsky/gsconfig@v0.16.1
 The library is **not on PyPI** — the `gsconfig` package there is an unrelated project.
 Releases are git tags; see [docs/release/](docs/release/).
 
-Requires Python 3.10+, `gspread`, and Google credentials (OAuth or a service account —
+Requires Python 3.8+, `gspread`, and Google credentials (OAuth or a service account —
 see [Authentication](docs/01-quick-start.md#authentication)).
 
 ## Example

@@ -8,8 +8,8 @@ and renders config files from templates.
 
 ## Tech Stack
 
-* **Language**: Python 3 (`setup.py` declares `python_requires='>=3.6'`; the code already
-  uses 3.10 syntax — see the Residual in `RULES.md`)
+* **Language**: Python 3.8+ (`setup.py` `python_requires`; the floor is set by the walrus in
+  `gsconfig/gsparser.py`)
 * **Runtime dependency**: `gspread` (declared); `oauth2client` (lazy, service-account path
   only, NOT declared)
 * **Testing**: pytest, offline — `tests/` (commands: `.claude/rules-scoped/testing-ops.md`)

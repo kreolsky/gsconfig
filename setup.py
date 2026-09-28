@@ -23,11 +23,10 @@ setup(
     url='https://github.com/kreolsky/gsconfig',
     keywords=['spreadsheets', 'google-spreadsheets', 'game-config'],
     install_requires=['gspread'],
-    python_requires='>=3.6',
+    python_requires='>=3.8',
     classifiers=[
         "Programming Language :: Python",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Development Status :: Alpha",

@@ -6,7 +6,7 @@
 pip install git+https://github.com/kreolsky/gsconfig@v0.16.1
 ```
 
-Not on PyPI: the `gsconfig` package there is an unrelated project. Requires Python 3.10+.
+Not on PyPI: the `gsconfig` package there is an unrelated project. Requires Python 3.8+.
 
 ## Authentication
 
